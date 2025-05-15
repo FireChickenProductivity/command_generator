@@ -26,3 +26,25 @@ pub fn get_file_from_user() -> File {
 	file
 }
 
+pub fn get_nonnegative_integer_from_user(prompt: &str, default: u32) -> u32 {
+	loop {
+		println!("{}", prompt);
+		let mut input = String::new();
+		let _result = io::stdin().read_line(&mut input);
+		match _result {
+			Ok(_result) => {
+				let trimmed_input = input.trim();
+				if trimmed_input.is_empty() {
+					return default;
+				} else if let Ok(value) = trimmed_input.parse::<u32>() {
+					return value;
+				} else {
+					println!("Please enter a non-negative integer.");
+				}
+			}
+			Err(_) => {
+				println!("Error reading input!");
+			}
+		}
+	}
+}
