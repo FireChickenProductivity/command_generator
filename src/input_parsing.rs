@@ -29,7 +29,7 @@ fn get_nonnegative_integer_from_user(prompt: &str, default: u32) -> u32 {
 				let trimmed_input = input.trim();
 				if trimmed_input.is_empty() {
 					return default;
-				} else if let Ok(value) = trimmed_input.parse::<u32>() {
+				} else if let Ok(value) = trimmed_input.parse() {
 					return value;
 				} else {
 					println!("Please enter a non-negative integer.");
