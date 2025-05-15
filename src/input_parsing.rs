@@ -56,3 +56,21 @@ pub fn get_max_chain_size_from_user() -> u32 {
 pub fn get_number_of_recommendations_from_user() -> u32 {
 	get_nonnegative_integer_from_user("Input the maximum number of command recommendations to output. Press enter with no input to take default of 0: ", 0)
 }
+
+pub struct InputParameters {
+	pub record_file: File,
+	pub max_chain_size: u32,
+	pub number_of_recommendations: u32,
+}
+
+pub fn get_input_parameters_from_user() -> InputParameters {
+	let record_file = get_file_from_user();
+	let max_chain_size = get_max_chain_size_from_user();
+	let number_of_recommendations = get_number_of_recommendations_from_user();
+
+	InputParameters {
+		record_file,
+		max_chain_size,
+		number_of_recommendations,
+	}
+}
