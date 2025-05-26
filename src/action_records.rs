@@ -1,52 +1,3 @@
-/*
-class BasicAction:
-	def __init__(self, name, arguments):
-		self.name = name
-		self.arguments = arguments
-	
-	def compute_talon_script(self):
-		code = self.name + '(' + ', '.join(self.compute_arguments_converted_to_talon_script_string()) + ')'
-		return code
-	
-	def compute_arguments_converted_to_talon_script_string(self):
-		result = []
-		for argument in self.arguments:
-			if type(argument) == str:
-				converted_argument = self.compute_string_argument(argument)
-			elif type(argument) == bool:
-				converted_argument = str(compute_talon_script_boolean_value(argument))
-			else:
-				converted_argument = str(argument)
-			result.append(converted_argument)
-		return result
-	
-	def compute_string_argument(self, argument: str):
-		string_argument = "'" + argument.replace("'", "\\'") + "'"
-		return string_argument
-	
-	def get_name(self):
-		return self.name
-	
-	def get_arguments(self):
-		return self.arguments
-	
-	def to_json(self) -> str:
-		return json.dumps({'name': self.name, 'arguments': self.arguments}, cls = BasicActionEncoder)
-	
-	@staticmethod
-	def from_json(text: str):
-		representation = json.loads(text)
-		return BasicAction(representation['name'], representation['arguments'])
-	
-	def __eq__(self, other) -> bool:
-		return other is not None and self.name == other.name and self.arguments == other.arguments
-	
-	def __repr__(self):
-		return self.__str__()
-	
-	def __str__(self):
-		return self.to_json() */
-
 use std::collections::HashMap;
 
 #[derive(Clone)]
@@ -264,4 +215,98 @@ pub enum Entry {
 const COMMAND_NAME_PREFIX: &str = "Command: ";
 const RECORDING_START_MESSAGE: &str = "START";
 const TIME_DIFFERENCE_PREFIX: &str = "T";
+
+fn parse_basic_action_json_argument_element(text: &str) -> Result<Argument, String> {
+	let trimmed_text = text.trim();
+	if let Ok(i32) = trimmed_text.parse::<i32>() {
+		Ok(Argument::IntArgument(i32))
+	} else if let Ok(f64) = trimmed_text.parse::<f64>() {
+		Ok(Argument::FloatArgument(f64))
+	} else if trimmed_text == "true" {
+		Ok(Argument::BoolArgument(true))
+	} else if trimmed_text == "false" {
+		Ok(Argument::BoolArgument(false))
+	} else {
+		Err(String::from("Invalid JSON element"))
+	}
+}
+
+enum JsonElement {
+	Argument(Argument),
+	String(String),
+	Container(JsonContainer),
+}
+
+enum JsonContainer {
+	Arguments(Vec<Argument>),
+	HashMap(HashMap<String, JsonElement>),
+}
+
+fn handle_stack_result(stack: &mut Vec<JsonContainer>) -> Result<HashMap<String, JsonElement>, String> {
+	if stack.is_empty() {
+		Err(String::from("JSON string is empty or not properly formatted."))
+	} else if stack.len() > 1 {
+		Err(String::from("JSON string has unclosed container"))
+	} else {
+		let result = stack.pop().unwrap();
+		match result {
+			JsonContainer::HashMap(map) => {
+				Ok(map)
+			}
+			_ => Err(String::from("JSON string does not represent a valid action map.")),
+		}
+	}
+}
+
+fn load_basic_action_map_from_json(json: &str) -> Result<HashMap<String, JsonElement>, String> {
+	let mut stack: Vec<JsonContainer> = Vec::new();
+	let text = json.trim();
+	let mut key = String::new();
+	let mut value_text = String::new();
+	let mut is_inside_string = false;
+	let mut current_text = String::new();
+	let mut escape_next_character = false;
+	let mut string_boundary = '"';
+	for char in text.chars() {
+		if is_inside_string {
+			if char == '\\' {
+				if escape_next_character {
+					current_text.push(char);
+					escape_next_character = false;
+				} else {
+					escape_next_character = true;
+				}
+			} else if char == string_boundary {
+				if escape_next_character {
+					current_text.push(char);
+					escape_next_character = false;
+				} else {
+					is_inside_string = false;
+				}
+			} else {
+				current_text.push(char);
+				
+			}
+		} else if char == '{' {
+			stack.push(JsonContainer::HashMap(HashMap::new()));
+		} else if char == '[' {
+			stack.push(JsonContainer::Arguments(Vec::new()));
+		} else if char == '}' {
+			if stack.is_empty() {
+				return Err(String::from("JSON string has extraneous closing brace"));
+			}
+			
+			let container = stack.pop().unwrap();
+			if let JsonContainer::HashMap(mut map) = container {
+				
+			} else {
+				return Err(String::from("JSON string has mismatched braces"));
+			}
+		}
+
+	}
+	
+
+	handle_stack_result(&mut stack)
+}
 
