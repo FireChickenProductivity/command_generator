@@ -49,6 +49,7 @@ class BasicAction:
 
 use std::collections::HashMap;
 
+#[derive(Clone)]
 pub struct TalonCapture {
 	name: String,
 	instance: i32,
@@ -73,8 +74,16 @@ impl TalonCapture {
 	pub fn to_json(&self) -> String {
 		format!("{{\"name\": \"{}\", \"instance\": {}}}", self.name, self.instance)
 	}
+
+	pub fn clone(&self) -> Self {
+		TalonCapture {
+			name: self.name.clone(),
+			instance: self.instance,
+		}
+	}
 }
 
+#[derive(Clone)]
 pub enum Argument {
 	StringArgument(String),
 	IntArgument(i32),
@@ -151,5 +160,108 @@ impl BasicAction {
 		result
 	}
 	
+	pub fn clone(&self) -> Self {
+		BasicAction {
+			name: self.name.clone(),
+			arguments: self.arguments.clone(),
+		}
+	}
 }
+
+pub struct Command {
+	name: String,
+	actions: Vec<BasicAction>,
+	seconds_since_last_action: Option<u32>,
+}
+
+impl Command {
+	pub fn new(name: &str, actions: Vec<BasicAction>, seconds_since_last_action: Option<u32>) -> Self {
+		Command {
+			name: String::from(name),
+			actions,
+			seconds_since_last_action: seconds_since_last_action,
+		}
+	}
+
+	pub fn get_name(&self) -> &str {
+		&self.name
+	}
+
+	pub fn get_actions(&self) -> &Vec<BasicAction> {
+		&self.actions
+	}
+
+	pub fn get_seconds_since_last_action(&self) -> Option<u32> {
+		self.seconds_since_last_action
+	}
+
+	pub fn to_string(&self) -> String {
+		let actions_text: Vec<String> = self.actions.iter()
+			.map(|action| action.to_json())
+			.collect();
+		let actions_joined = actions_text.join("");
+		let seconds_since_last_text = match self.seconds_since_last_action {
+			Some(seconds) => seconds.to_string(),
+			None => String::new(),
+		};
+		format!("Command({}, {}, {}", self.name, seconds_since_last_text, actions_joined)
+	}
+
+	pub fn append(&mut self, command: &Command) {
+		command.actions.iter().for_each(|action| {
+			self.actions.push(action.clone());
+		});
+		self.name.push_str(command.get_name());
+	}
+}
+
+struct CommandChain {
+	command: Command,
+	chain_number: u32,
+	chain_size: u32,
+}
+
+impl CommandChain {
+	pub fn new(command: Command, chain_number: u32, chain_size: u32) -> Self {
+		CommandChain {
+			command,
+			chain_number,
+			chain_size,
+		}
+	}
+
+	pub fn get_command(&self) -> &Command {
+		&self.command
+	}
+
+	pub fn get_chain_number(&self) -> u32 {
+		self.chain_number
+	}
+
+	pub fn get_chain_ending_index(&self) -> u32 {
+		self.chain_number + self.chain_size - 1
+	}
+
+	pub fn get_next_chain_index(&self) -> u32 {
+		self.chain_number + self.chain_size
+	}
+
+	pub fn get_size(&self) -> u32 {
+		self.chain_size
+	}
+
+	pub fn append_command(&mut self, command: Command) {
+		self.command.append(&command);
+		self.chain_size += 1;
+	}
+}
+
+pub enum Entry {
+	RecordingStart,
+	Command,
+}
+
+const COMMAND_NAME_PREFIX: &str = "Command: ";
+const RECORDING_START_MESSAGE: &str = "START";
+const TIME_DIFFERENCE_PREFIX: &str = "T";
 
