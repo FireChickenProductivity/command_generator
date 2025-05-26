@@ -47,15 +47,51 @@ class BasicAction:
 	def __str__(self):
 		return self.to_json() */
 
+use std::collections::HashMap;
+
+pub struct TalonCapture {
+	name: String,
+	instance: i32,
+}
+
+impl TalonCapture {
+	pub fn new(name: &str, instance: i32) -> Self {
+		TalonCapture {
+			name: String::from(name),
+			instance,
+		}
+	}
+
+	pub fn compute_string_representation(&self) -> String {
+		format!("{}_{}", self.name, self.instance)
+	}
+
+	pub fn compute_command_component(&self) -> String {
+		format!("<{}>", self.name)
+	}
+
+	pub fn to_json(&self) -> String {
+		format!("{{\"name\": \"{}\", \"instance\": {}}}", self.name, self.instance)
+	}
+}
+
+pub enum Argument {
+	StringArgument(String),
+	IntArgument(i32),
+	BoolArgument(bool),
+	FloatArgument(f64),
+	CaptureArgument(TalonCapture),
+}
+
 pub struct BasicAction {
 	name: String,
-	arguments: Vec<String>,
+	arguments: Vec<Argument>,
 }
 
 impl BasicAction {
-	pub fn new(name: &str, arguments: Vec<String>) -> Self {
+	pub fn new(name: &str, arguments: Vec<Argument>) -> Self {
 		BasicAction {
-			name: String::from("name"),
+			name: String::from(name),
 			arguments,
 		}
 	}
@@ -64,7 +100,7 @@ impl BasicAction {
 		&self.name
 	}
 
-	pub fn get_arguments(&self) -> &Vec<String> {
+	pub fn get_arguments(&self) -> &Vec<Argument> {
 		&self.arguments
 	}
 
@@ -81,30 +117,39 @@ impl BasicAction {
 			.collect()
 	}
 
-	pub fn compute_string_argument(&self, argument: &str) -> String {
-		let string_argument = format!("'{}'", argument.replace("'", "\\'"));
-		string_argument
+	pub fn compute_string_argument(&self, argument: &Argument) -> String {
+		match argument {
+			Argument::StringArgument(arg) => arg.to_string(),
+			Argument::IntArgument(arg) => arg.to_string(),
+			Argument::BoolArgument(arg) => arg.to_string(),
+			Argument::FloatArgument(arg) => arg.to_string(),
+			Argument::CaptureArgument(arg) => arg.compute_command_component(),
+		}
+	}
+
+	pub fn compute_argument_json(&self, argument: &Argument) -> String {
+		match argument {
+			Argument::StringArgument(arg) => arg.replace("\"", "\\\""),
+			Argument::CaptureArgument(arg) => arg.to_json(),
+			other => self.compute_string_argument(other),
+		}
 	}
 
 	//I will have to think about how to handle talon captures
 	pub fn to_json(&self) -> String {
-		let mut result = String::from("{\"name\": \"");
-		result.push_str(&self.name);
-		result.push_str("\", 'arguments': [\"");
+		let mut result = format!("{{\"name\": \"{}\", \"arguments\": [", self.name);
 		let mut pushed_first = false;
 		for argument in &self.arguments {
 			if pushed_first {
-				result.push_str("\", \"");
+				result.push_str(", ");
 			} else {
 				pushed_first = true;
 			}
-			result.push_str(argument);
+			result.push_str(self.compute_argument_json(argument).as_str());
 		}
-		result.push_str("\"]}");
+		result.push_str("]}");
 		result
 	}
-
-	
-
 	
 }
+
