@@ -348,12 +348,11 @@ fn load_basic_action_map_from_json(json: &str) -> Result<HashMap<String, JsonEle
 				return Err(String::from("JSON string has extraneous closing brace"));
 			}
 			add_current_item(&mut stack, &mut key, &mut value_text)?;
-			let container = stack.last().unwrap();
+			let container = stack.pop().unwrap();
 			if let JsonContainer::HashMap(map) = container {
-				if stack.len() > 1 {
-					stack.pop();
+				if stack.len() > 0 {
 					if let JsonContainer::Arguments(arguments) = stack.last_mut().unwrap() {
-						let capture = load_talon_capture_from_map(map)?;
+						let capture = load_talon_capture_from_map(&map)?;
 						arguments.push(Argument::CaptureArgument(capture))
 					}
 				} else {
