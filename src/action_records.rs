@@ -271,7 +271,10 @@ fn add_current_item(
 ) -> Result<(), String> {
 	if stack.is_empty() {
 		return Err(String::from("JSON string has no open container to add item to"));
+	} else if value_text.is_empty() {
+		return Err(String::from("JSON string has no value for item"));
 	}
+
 	match stack.last_mut().unwrap() {
 		JsonContainer::HashMap(map) => {
 			if key.is_empty() {
@@ -288,6 +291,19 @@ fn add_current_item(
 	}
 	value_text.clear();
 	Ok(())
+}
+
+fn load_talon_capture_from_map(map: &HashMap<String, JsonElement>) -> Result<TalonCapture, String> {
+	let name = match map.get("name") {
+		Some(JsonElement::String(name)) => name,
+		_ => return Err(String::from("Capture JSON does not contain a name field")),
+	};
+	match map.get("instance") {
+		Some(JsonElement::Argument(Argument::IntArgument(instance))) => {
+			return Ok(TalonCapture::new(name, *instance));
+		}
+		_ => return Err(String::from("Capture JSON does not contain an instance field")),
+	};
 }
 
 fn load_basic_action_map_from_json(json: &str) -> Result<HashMap<String, JsonElement>, String> {
@@ -331,13 +347,14 @@ fn load_basic_action_map_from_json(json: &str) -> Result<HashMap<String, JsonEle
 			if stack.is_empty() {
 				return Err(String::from("JSON string has extraneous closing brace"));
 			}
-			
+			add_current_item(&mut stack, &mut key, &mut value_text)?;
 			let container = stack.last().unwrap();
 			if let JsonContainer::HashMap(map) = container {
 				if stack.len() > 1 {
 					stack.pop();
-					if let JsonContainer::Arguments(arguments) = stack.last_mut()? {
-						arguments.push(map);
+					if let JsonContainer::Arguments(arguments) = stack.last_mut().unwrap() {
+						let capture = load_talon_capture_from_map(map)?;
+						arguments.push(Argument::CaptureArgument(capture))
 					}
 				} else {
 					return Err(String::from("Found a map not contained by a list, which is not permitted"));
@@ -349,9 +366,9 @@ fn load_basic_action_map_from_json(json: &str) -> Result<HashMap<String, JsonEle
 			if stack.len() < 2 {
 				return Err(String::from("JSON string has extraneous closing bracket"));
 			} else {
+				add_current_item(&mut stack, &mut key, &mut value_text)?;
 				let container = stack.pop().unwrap();
 				if let JsonContainer::Arguments(arguments) = container {
-					let mut inner_container = stack.last_mut().unwrap();
 					if let JsonContainer::HashMap(map) = stack.last_mut().unwrap() {
 						if !key.is_empty() {
 							map.insert(key.clone(), JsonElement::Container(JsonContainer::Arguments(arguments)));
@@ -366,8 +383,23 @@ fn load_basic_action_map_from_json(json: &str) -> Result<HashMap<String, JsonEle
 					return Err(String::from("JSON string has mismatched brackets"));
 				}
 			}
+		} else if char == ':' {
+			if !key.is_empty() {
+				return Err(String::from("JSON string has a colon without a key"))
+			}
+			match stack.last_mut() {
+				Some(JsonContainer::HashMap(_)) => {
+					key = String::from(current_text.clone());
+					current_text.clear();
+				}
+				_ => return Err(String::from("JSON string has a colon without a containing map")),
+			}
+		} else if char == ',' {
+			add_current_item(&mut stack, &mut key, &mut value_text)?;
+		} else if char == '"' || char == '\'' {
+			is_inside_string = true;
+			string_boundary = char;
 		}
-
 	}
 	
 
