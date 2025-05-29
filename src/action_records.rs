@@ -264,6 +264,32 @@ fn handle_stack_result(stack: &mut Vec<JsonContainer>) -> Result<HashMap<String,
 	}
 }
 
+fn add_current_item(
+	stack: &mut Vec<JsonContainer>,
+	key: &mut String,
+	value_text: &mut String,
+) -> Result<(), String> {
+	if stack.is_empty() {
+		return Err(String::from("JSON string has no open container to add item to"));
+	}
+	match stack.last_mut().unwrap() {
+		JsonContainer::HashMap(map) => {
+			if key.is_empty() {
+				return Err(String::from("JSON string has empty key for item"));
+			}
+			let argument = JsonElement::Argument(parse_basic_action_json_argument_element(value_text)?);
+			map.insert(key.clone(), argument);
+			key.clear();
+		}
+		JsonContainer::Arguments(arguments) => {
+			let argument = parse_basic_action_json_argument_element(value_text)?;
+			arguments.push(argument);
+		}
+	}
+	value_text.clear();
+	Ok(())
+}
+
 fn load_basic_action_map_from_json(json: &str) -> Result<HashMap<String, JsonElement>, String> {
 	let mut stack: Vec<JsonContainer> = Vec::new();
 	let text = json.trim();
@@ -296,17 +322,49 @@ fn load_basic_action_map_from_json(json: &str) -> Result<HashMap<String, JsonEle
 		} else if char == '{' {
 			stack.push(JsonContainer::HashMap(HashMap::new()));
 		} else if char == '[' {
-			stack.push(JsonContainer::Arguments(Vec::new()));
+			if stack.len() < 1 {
+				return Err(String::from("List encountered without containing map"));
+			} else {
+				stack.push(JsonContainer::Arguments(Vec::new()));
+			}
 		} else if char == '}' {
 			if stack.is_empty() {
 				return Err(String::from("JSON string has extraneous closing brace"));
 			}
 			
-			let container = stack.pop().unwrap();
-			if let JsonContainer::HashMap(mut map) = container {
-				
+			let container = stack.last().unwrap();
+			if let JsonContainer::HashMap(map) = container {
+				if stack.len() > 1 {
+					stack.pop();
+					if let JsonContainer::Arguments(arguments) = stack.last_mut()? {
+						arguments.push(map);
+					}
+				} else {
+					return Err(String::from("Found a map not contained by a list, which is not permitted"));
+				}
 			} else {
 				return Err(String::from("JSON string has mismatched braces"));
+			}
+		} else if char == ']' {
+			if stack.len() < 2 {
+				return Err(String::from("JSON string has extraneous closing bracket"));
+			} else {
+				let container = stack.pop().unwrap();
+				if let JsonContainer::Arguments(arguments) = container {
+					let mut inner_container = stack.last_mut().unwrap();
+					if let JsonContainer::HashMap(map) = stack.last_mut().unwrap() {
+						if !key.is_empty() {
+							map.insert(key.clone(), JsonElement::Container(JsonContainer::Arguments(arguments)));
+							key.clear();
+						} else {
+							return Err(String::from("JSON string has empty key for arguments"));
+						}
+					} else {
+						return Err(String::from("JSON string has mismatched brackets"));
+					}
+				} else {
+					return Err(String::from("JSON string has mismatched brackets"));
+				}
 			}
 		}
 
