@@ -19,7 +19,7 @@ impl TalonCapture {
 	}
 
 	pub fn compute_command_component(&self) -> String {
-		format!("<{}>", self.name)
+		format!("<{}_{}>", self.name, self.instance)
 	}
 
 	pub fn to_json(&self) -> String {
@@ -80,7 +80,13 @@ impl BasicAction {
 
 	pub fn compute_string_argument(&self, argument: &Argument) -> String {
 		match argument {
-			Argument::StringArgument(arg) => arg.to_string(),
+			Argument::StringArgument(arg) => {
+				let mut result = arg.to_string();
+				if result.contains('\"') {
+					result = result.replace("\"", "\\\"");
+				}
+				format!("\"{}\"", result)
+			},
 			Argument::IntArgument(arg) => arg.to_string(),
 			Argument::BoolArgument(arg) => arg.to_string(),
 			Argument::FloatArgument(arg) => arg.to_string(),
@@ -310,3 +316,23 @@ fn load_basic_action_map_from_json(json: &str) -> Result<HashMap<String, JsonEle
 	handle_stack_result(&mut stack)
 }
 
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn test_basic_action_string() {
+		let action = BasicAction::new(
+			"text_action",
+			vec![
+				Argument::StringArgument(String::from("text")),
+				Argument::IntArgument(42),
+				Argument::BoolArgument(true),
+				Argument::FloatArgument(3.14),
+				Argument::CaptureArgument(TalonCapture::new("capture_name", 1)),
+			]
+		);
+		let talon_script = String::from("text_action(\"text\", 42, true, 3.14, <capture_name_1>)");
+		assert_eq!(action.compute_talon_script(), talon_script);
+	}
+}
