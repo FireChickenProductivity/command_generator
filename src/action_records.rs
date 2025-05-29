@@ -43,6 +43,7 @@ pub enum Argument {
 	CaptureArgument(TalonCapture),
 }
 
+
 pub struct BasicAction {
 	name: String,
 	arguments: Vec<Argument>,
@@ -95,7 +96,6 @@ impl BasicAction {
 		}
 	}
 
-	//I will have to think about how to handle talon captures
 	pub fn to_json(&self) -> String {
 		let mut result = format!("{{\"name\": \"{}\", \"arguments\": [", self.name);
 		let mut pushed_first = false;
