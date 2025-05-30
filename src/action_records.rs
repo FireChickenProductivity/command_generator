@@ -348,18 +348,24 @@ fn load_basic_action_map_from_json(json: &str) -> Result<HashMap<String, JsonEle
 				return Err(String::from("JSON string has extraneous closing brace"));
 			}
 			add_current_item(&mut stack, &mut key, &mut value_text)?;
-			let container = stack.pop().unwrap();
-			if let JsonContainer::HashMap(map) = container {
-				if stack.len() > 0 {
-					if let JsonContainer::Arguments(arguments) = stack.last_mut().unwrap() {
-						let capture = load_talon_capture_from_map(&map)?;
-						arguments.push(Argument::CaptureArgument(capture))
-					}
-				} else {
-					return Err(String::from("Found a map not contained by a list, which is not permitted"));
+			if stack.len() == 1 {
+				if let JsonContainer::Arguments(_) = stack.last().unwrap() {
+					return Err(String::from("JSON string has a list at the top level, which is not permitted"));
 				}
 			} else {
-				return Err(String::from("JSON string has mismatched braces"));
+				let container = stack.pop().unwrap();
+				if let JsonContainer::HashMap(map) = container {
+					if stack.len() > 0 {
+						if let JsonContainer::Arguments(arguments) = stack.last_mut().unwrap() {
+							let capture = load_talon_capture_from_map(&map)?;
+							arguments.push(Argument::CaptureArgument(capture))
+						}
+					} else {
+						return Err(String::from("Found a map not contained by a list, which is not permitted"));
+					}
+				} else {
+					return Err(String::from("JSON string has mismatched braces"));
+				}
 			}
 		} else if char == ']' {
 			if stack.len() < 2 {
