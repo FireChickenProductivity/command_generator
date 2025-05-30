@@ -222,7 +222,10 @@ const COMMAND_NAME_PREFIX: &str = "Command: ";
 const RECORDING_START_MESSAGE: &str = "START";
 const TIME_DIFFERENCE_PREFIX: &str = "T";
 
-fn parse_basic_action_json_argument_element(text: &str) -> Result<Argument, String> {
+fn parse_basic_action_json_argument_element(text: &str, is_string: bool) -> Result<Argument, String> {
+	if is_string {
+		return Ok(Argument::StringArgument(String::from(text)));
+	}
 	let trimmed_text = text.trim();
 	if let Ok(i32) = trimmed_text.parse::<i32>() {
 		Ok(Argument::IntArgument(i32))
@@ -233,7 +236,8 @@ fn parse_basic_action_json_argument_element(text: &str) -> Result<Argument, Stri
 	} else if trimmed_text == "false" {
 		Ok(Argument::BoolArgument(false))
 	} else {
-		Err(String::from("Invalid JSON element"))
+		let message = format!("Invalid JSON element: {}", trimmed_text);
+		Err(String::from(message))
 	}
 }
 
@@ -268,11 +272,13 @@ fn add_current_item(
 	stack: &mut Vec<JsonContainer>,
 	key: &mut String,
 	value_text: &mut String,
+	is_current_value_string: &mut bool,
 ) -> Result<(), String> {
 	if stack.is_empty() {
 		return Err(String::from("JSON string has no open container to add item to"));
 	} else if value_text.is_empty() {
-		return Err(String::from("JSON string has no value for item"));
+		let message = format!("called add_current_item with key: |{}|, value_text: |{}|, is_current_value_string: {}\n", key, value_text, is_current_value_string);
+		return Err(String::from(message));
 	}
 
 	match stack.last_mut().unwrap() {
@@ -280,16 +286,17 @@ fn add_current_item(
 			if key.is_empty() {
 				return Err(String::from("JSON string has empty key for item"));
 			}
-			let argument = JsonElement::Argument(parse_basic_action_json_argument_element(value_text)?);
+			let argument = JsonElement::Argument(parse_basic_action_json_argument_element(value_text, *is_current_value_string)?);
 			map.insert(key.clone(), argument);
 			key.clear();
 		}
 		JsonContainer::Arguments(arguments) => {
-			let argument = parse_basic_action_json_argument_element(value_text)?;
+			let argument = parse_basic_action_json_argument_element(value_text, *is_current_value_string)?;
 			arguments.push(argument);
 		}
 	}
 	value_text.clear();
+	*is_current_value_string = false;
 	Ok(())
 }
 
@@ -310,8 +317,8 @@ fn load_basic_action_map_from_json(json: &str) -> Result<HashMap<String, JsonEle
 	let mut stack: Vec<JsonContainer> = Vec::new();
 	let text = json.trim();
 	let mut key = String::new();
-	let mut value_text = String::new();
 	let mut is_inside_string = false;
+	let mut is_current_value_string = false;
 	let mut current_text = String::new();
 	let mut escape_next_character = false;
 	let mut string_boundary = '"';
@@ -333,7 +340,6 @@ fn load_basic_action_map_from_json(json: &str) -> Result<HashMap<String, JsonEle
 				}
 			} else {
 				current_text.push(char);
-				
 			}
 		} else if char == '{' {
 			stack.push(JsonContainer::HashMap(HashMap::new()));
@@ -347,7 +353,9 @@ fn load_basic_action_map_from_json(json: &str) -> Result<HashMap<String, JsonEle
 			if stack.is_empty() {
 				return Err(String::from("JSON string has extraneous closing brace"));
 			}
-			add_current_item(&mut stack, &mut key, &mut value_text)?;
+			if !key.is_empty() || !current_text.is_empty() || is_current_value_string {
+				add_current_item(&mut stack, &mut key, &mut current_text, &mut is_current_value_string)?;
+			}
 			if stack.len() == 1 {
 				if let JsonContainer::Arguments(_) = stack.last().unwrap() {
 					return Err(String::from("JSON string has a list at the top level, which is not permitted"));
@@ -371,7 +379,7 @@ fn load_basic_action_map_from_json(json: &str) -> Result<HashMap<String, JsonEle
 			if stack.len() < 2 {
 				return Err(String::from("JSON string has extraneous closing bracket"));
 			} else {
-				add_current_item(&mut stack, &mut key, &mut value_text)?;
+				add_current_item(&mut stack, &mut key, &mut current_text, &mut is_current_value_string)?;
 				let container = stack.pop().unwrap();
 				if let JsonContainer::Arguments(arguments) = container {
 					if let JsonContainer::HashMap(map) = stack.last_mut().unwrap() {
@@ -400,10 +408,13 @@ fn load_basic_action_map_from_json(json: &str) -> Result<HashMap<String, JsonEle
 				_ => return Err(String::from("JSON string has a colon without a containing map")),
 			}
 		} else if char == ',' {
-			add_current_item(&mut stack, &mut key, &mut value_text)?;
+			add_current_item(&mut stack, &mut key, &mut current_text, &mut is_current_value_string)?;
 		} else if char == '"' || char == '\'' {
 			is_inside_string = true;
 			string_boundary = char;
+			if !key.is_empty() {
+				is_current_value_string = true;
+			}
 		}
 	}
 	
@@ -429,5 +440,44 @@ mod tests {
 		);
 		let talon_script = String::from("text_action(\"text\", 42, true, 3.14, <capture_name_1>)");
 		assert_eq!(action.compute_talon_script(), talon_script);
+	}
+
+	fn assert_keys_match(
+		expected: &HashMap<String, JsonElement>,
+		actual: &HashMap<String, JsonElement>,
+	) {
+		for key in expected.keys() {
+			assert!(actual.contains_key(key), "Key {} not found in actual map", key);
+		}
+		for key in actual.keys() {
+			assert!(expected.contains_key(key), "Key {} not found in expected map", key);
+		}
+	}
+
+	#[test]
+	fn test_insert_map() {
+		let mut expected = HashMap::new();
+		expected.insert(
+			String::from("name"),
+			JsonElement::String(String::from("insert")),
+		);
+		expected.insert(
+			String::from("arguments"),
+			JsonElement::Container(JsonContainer::Arguments(vec![
+				Argument::StringArgument(String::from("text")),
+			])),
+		);
+		let json = r#"{"name": "insert", "arguments": ["text"]}"#;
+		let actual_result = load_basic_action_map_from_json(json);
+		match actual_result {
+			Ok(actual) => {
+				assert_eq!(actual.len(), expected.len());
+				assert_keys_match(&expected, &actual);
+			}
+			Err(message) => {
+				panic!("Error parsing JSON: {}", message);
+			}
+		}
+		
 	}
 }
