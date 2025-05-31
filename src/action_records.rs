@@ -418,7 +418,7 @@ fn load_basic_action_map_from_json(json: &str) -> Result<HashMap<String, JsonEle
 			}
 		} else if char == ':' {
 			if !key.is_empty() {
-				return Err(String::from("JSON string has a colon without a key"))
+				return Err(format!("JSON string has a colon with a predefined key: {}", key));
 			}
 			match stack.last_mut() {
 				Some(JsonContainer::HashMap(_)) => {
