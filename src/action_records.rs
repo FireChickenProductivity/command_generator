@@ -258,12 +258,14 @@ fn parse_basic_action_json_argument_element(text: &str, is_string: bool) -> Resu
 	}
 }
 
+#[derive(Debug)]
 enum JsonElement {
 	Argument(Argument),
 	String(String),
 	Container(JsonContainer),
 }
 
+#[derive(Debug)]
 enum JsonContainer {
 	Arguments(Vec<Argument>),
 	HashMap(HashMap<String, JsonElement>),
@@ -319,14 +321,14 @@ fn add_current_item(
 
 fn load_talon_capture_from_map(map: &HashMap<String, JsonElement>) -> Result<TalonCapture, String> {
 	let name = match map.get("name") {
-		Some(JsonElement::String(name)) => name,
-		_ => return Err(String::from("Capture JSON does not contain a name field")),
+		Some(JsonElement::Argument(Argument::StringArgument(name))) => name,
+		_ => return Err(format!("Capture JSON does not contain a name field {:?}", map)),
 	};
 	match map.get("instance") {
 		Some(JsonElement::Argument(Argument::IntArgument(instance))) => {
 			return Ok(TalonCapture::new(name, *instance));
 		}
-		_ => return Err(String::from("Capture JSON does not contain an instance field")),
+		_ => return Err(format!("Capture JSON does not contain an instance field {:?}", map)),
 	};
 }
 
@@ -336,6 +338,7 @@ fn load_basic_action_map_from_json(json: &str) -> Result<HashMap<String, JsonEle
 	let mut key = String::new();
 	let mut is_inside_string = false;
 	let mut is_inside_list = false;
+	let mut argument_key = String::new();
 	let mut is_current_value_string = false;
 	let mut current_text = String::new();
 	let mut escape_next_character = false;
@@ -363,6 +366,12 @@ fn load_basic_action_map_from_json(json: &str) -> Result<HashMap<String, JsonEle
 			stack.push(JsonContainer::HashMap(HashMap::new()));
 		} else if char == '[' {
 			is_inside_list = true;
+			if key.is_empty() {
+				return Err(String::from("List encountered without a key"));
+			} else {
+				argument_key = key.clone();
+				key.clear();
+			}
 			if stack.len() < 1 {
 				return Err(String::from("List encountered without containing map"));
 			} else {
@@ -403,11 +412,11 @@ fn load_basic_action_map_from_json(json: &str) -> Result<HashMap<String, JsonEle
 				let container = stack.pop().unwrap();
 				if let JsonContainer::Arguments(arguments) = container {
 					if let JsonContainer::HashMap(map) = stack.last_mut().unwrap() {
-						if !key.is_empty() {
-							map.insert(key.clone(), JsonElement::Container(JsonContainer::Arguments(arguments)));
-							key.clear();
-						} else {
+						if argument_key.is_empty() {
 							return Err(String::from("JSON string has empty key for arguments"));
+						} else {
+							map.insert(argument_key.clone(), JsonElement::Container(JsonContainer::Arguments(arguments)));
+							argument_key.clear();
 						}
 					} else {
 						return Err(String::from("JSON string has mismatched brackets"));
