@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 
 #[derive(Clone)]
+#[derive(PartialEq)]
+#[derive(Eq)]
+#[derive(Debug)]
 pub struct TalonCapture {
 	name: String,
 	instance: i32,
@@ -35,6 +38,7 @@ impl TalonCapture {
 }
 
 #[derive(Clone)]
+#[derive(Debug)]
 pub enum Argument {
 	StringArgument(String),
 	IntArgument(i32),
@@ -43,6 +47,19 @@ pub enum Argument {
 	CaptureArgument(TalonCapture),
 }
 
+impl PartialEq for Argument {
+	fn eq(&self, other: &Self) -> bool {
+		match (self, other) {
+			(Argument::StringArgument(a), Argument::StringArgument(b)) => a == b,
+			(Argument::IntArgument(a), Argument::IntArgument(b)) => a == b,
+			(Argument::BoolArgument(a), Argument::BoolArgument(b)) => a == b,
+			(Argument::FloatArgument(a), Argument::FloatArgument(b)) => a == b,
+			(Argument::CaptureArgument(a), Argument::CaptureArgument(b)) => a == b,
+			_ => false,
+		}
+	}
+	
+}
 
 pub struct BasicAction {
 	name: String,
@@ -454,6 +471,59 @@ mod tests {
 		}
 	}
 
+	fn treat_json_element_as_string_with_panic(element: &JsonElement) -> &String {
+		match element {
+			JsonElement::String(s) => s,
+			JsonElement::Argument(arg) => match arg {
+				Argument::StringArgument(s) => s,
+				_ => panic!("Expected a string argument, found something else"),
+			},
+			JsonElement::Container(_) => panic!("Expected a string, found a container"),
+		}
+	}
+
+	fn treat_json_element_as_arguments_with_panic(
+		element: &JsonElement,
+	) -> &Vec<Argument> {
+		match element {
+			JsonElement::Container(JsonContainer::Arguments(args)) => args,
+			_ => panic!("Expected an arguments container, found something else"),
+		}
+	}
+
+	fn assert_map_content_match(
+		expected: &HashMap<String, JsonElement>,
+		actual: &HashMap<String, JsonElement>,
+	) {
+		let expected_name = treat_json_element_as_string_with_panic(
+			expected.get("name").unwrap()
+		);
+		let actual_name = treat_json_element_as_string_with_panic(
+			actual.get("name").unwrap()
+		);
+		assert_eq!(expected_name, actual_name, "Action names do not match");
+		let expected_arguments = treat_json_element_as_arguments_with_panic(
+			expected.get("arguments").unwrap()
+		);
+		let actual_arguments = treat_json_element_as_arguments_with_panic(
+			actual.get("arguments").unwrap()
+		);
+		assert_eq!(expected_arguments.len(), actual_arguments.len(), "Number of arguments do not match");
+		for (i, expected_argument) in expected_arguments.iter().enumerate() {
+			let actual_argument = &actual_arguments[i];
+			assert_eq!(expected_argument, actual_argument, "Argument at index {} does not match", i);
+		}
+	}
+
+	fn assert_maps_match(
+		expected: &HashMap<String, JsonElement>,
+		actual: &HashMap<String, JsonElement>,
+	) {
+		assert_keys_match(expected, actual);
+		assert_map_content_match(expected, actual);
+	}
+	
+
 	#[test]
 	fn test_insert_map() {
 		let mut expected = HashMap::new();
@@ -472,7 +542,7 @@ mod tests {
 		match actual_result {
 			Ok(actual) => {
 				assert_eq!(actual.len(), expected.len());
-				assert_keys_match(&expected, &actual);
+				assert_maps_match(&expected, &actual);
 			}
 			Err(message) => {
 				panic!("Error parsing JSON: {}", message);
