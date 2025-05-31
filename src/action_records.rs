@@ -408,7 +408,9 @@ fn load_basic_action_map_from_json(json: &str) -> Result<HashMap<String, JsonEle
 			if stack.len() < 2 {
 				return Err(String::from("JSON string has extraneous closing bracket"));
 			} else {
-				add_current_item(&mut stack, &mut key, &mut current_text, &mut is_current_value_string)?;
+				if !current_text.is_empty() {
+					add_current_item(&mut stack, &mut key, &mut current_text, &mut is_current_value_string)?;
+				}
 				let container = stack.pop().unwrap();
 				if let JsonContainer::Arguments(arguments) = container {
 					if let JsonContainer::HashMap(map) = stack.last_mut().unwrap() {
@@ -444,7 +446,7 @@ fn load_basic_action_map_from_json(json: &str) -> Result<HashMap<String, JsonEle
 			if !key.is_empty() {
 				is_current_value_string = true;
 			}
-		} else if is_inside_list {
+		} else if is_inside_list && (!current_text.is_empty() || char != ' ') {
 			current_text.push(char);
 		}
 	}
