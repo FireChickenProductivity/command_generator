@@ -523,22 +523,21 @@ mod tests {
 		assert_map_content_match(expected, actual);
 	}
 	
-
-	#[test]
-	fn test_insert_map() {
+	fn assert_map_matches_expected_from_string(
+		name: &str,
+		arguments: &Vec<Argument>,
+		text: &str,
+	) {
 		let mut expected = HashMap::new();
 		expected.insert(
 			String::from("name"),
-			JsonElement::String(String::from("insert")),
+			JsonElement::String(String::from(name)),
 		);
 		expected.insert(
 			String::from("arguments"),
-			JsonElement::Container(JsonContainer::Arguments(vec![
-				Argument::StringArgument(String::from("text")),
-			])),
+			JsonElement::Container(JsonContainer::Arguments(arguments.clone())),
 		);
-		let json = r#"{"name": "insert", "arguments": ["text"]}"#;
-		let actual_result = load_basic_action_map_from_json(json);
+		let actual_result = load_basic_action_map_from_json(text);
 		match actual_result {
 			Ok(actual) => {
 				assert_eq!(actual.len(), expected.len());
@@ -548,6 +547,12 @@ mod tests {
 				panic!("Error parsing JSON: {}", message);
 			}
 		}
-		
+	}
+	#[test]
+	fn test_insert_map() {
+		let name = String::from("insert");
+		let arguments = vec![Argument::StringArgument(String::from("text"))];
+		let json = r#"{"name": "insert", "arguments": ["text"]}"#;
+		assert_map_matches_expected_from_string(&name, &arguments, json);
 	}
 }
