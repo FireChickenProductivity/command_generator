@@ -335,6 +335,7 @@ fn load_basic_action_map_from_json(json: &str) -> Result<HashMap<String, JsonEle
 	let text = json.trim();
 	let mut key = String::new();
 	let mut is_inside_string = false;
+	let mut is_inside_list = false;
 	let mut is_current_value_string = false;
 	let mut current_text = String::new();
 	let mut escape_next_character = false;
@@ -361,6 +362,7 @@ fn load_basic_action_map_from_json(json: &str) -> Result<HashMap<String, JsonEle
 		} else if char == '{' {
 			stack.push(JsonContainer::HashMap(HashMap::new()));
 		} else if char == '[' {
+			is_inside_list = true;
 			if stack.len() < 1 {
 				return Err(String::from("List encountered without containing map"));
 			} else {
@@ -393,6 +395,7 @@ fn load_basic_action_map_from_json(json: &str) -> Result<HashMap<String, JsonEle
 				}
 			}
 		} else if char == ']' {
+			is_inside_list = false;
 			if stack.len() < 2 {
 				return Err(String::from("JSON string has extraneous closing bracket"));
 			} else {
@@ -432,6 +435,8 @@ fn load_basic_action_map_from_json(json: &str) -> Result<HashMap<String, JsonEle
 			if !key.is_empty() {
 				is_current_value_string = true;
 			}
+		} else if is_inside_list {
+			current_text.push(char);
 		}
 	}
 	
@@ -597,5 +602,5 @@ mod tests {
 		let json = r#"{"name": "mouse_scroll", "arguments": [0, 1, true]}"#;
 		assert_map_matches_expected_from_string(&name, &arguments, json);
 	}
-	
+
 }
