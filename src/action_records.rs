@@ -548,6 +548,7 @@ mod tests {
 			}
 		}
 	}
+	
 	#[test]
 	fn test_insert_map() {
 		let name = String::from("insert");
@@ -555,4 +556,46 @@ mod tests {
 		let json = r#"{"name": "insert", "arguments": ["text"]}"#;
 		assert_map_matches_expected_from_string(&name, &arguments, json);
 	}
+
+	#[test]
+	fn test_insert_capture_map() {
+		let name = String::from("insert");
+		let arguments = vec![Argument::CaptureArgument(TalonCapture::new("capture_name", 1))];
+		let json = r#"{"name": "insert", "arguments": [{"name": "capture_name", "instance": 1}]}"#;
+		assert_map_matches_expected_from_string(&name, &arguments, json);
+	}
+
+	#[test]
+	fn test_mouse_move_map() {
+		let name = String::from("mouse_move");
+		let arguments = vec![
+			Argument::IntArgument(100),
+			Argument::IntArgument(200),
+		];
+		let json = r#"{"name": "mouse_move", "arguments": [100, 200]}"#;
+		assert_map_matches_expected_from_string(&name, &arguments, json);
+	}
+
+	#[test]
+	fn test_mouse_click_map() {
+		let name = String::from("mouse_click");
+		let arguments = vec![
+			Argument::IntArgument(1),
+		];
+		let json = r#"{"name": "mouse_click", "arguments": [1]}"#;
+		assert_map_matches_expected_from_string(&name, &arguments, json);
+	}
+
+	#[test]
+	fn test_mouse_scroll_map() {
+		let name = String::from("mouse_scroll");
+		let arguments = vec![
+			Argument::IntArgument(0),
+			Argument::IntArgument(1),
+			Argument::BoolArgument(true),
+		];
+		let json = r#"{"name": "mouse_scroll", "arguments": [0, 1, true]}"#;
+		assert_map_matches_expected_from_string(&name, &arguments, json);
+	}
+	
 }
