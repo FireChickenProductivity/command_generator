@@ -253,7 +253,7 @@ fn parse_basic_action_json_argument_element(text: &str, is_string: bool) -> Resu
 	} else if trimmed_text == "false" {
 		Ok(Argument::BoolArgument(false))
 	} else {
-		let message = format!("Invalid JSON element: {}", trimmed_text);
+		let message = format!("Invalid JSON element: {}, is string: {}", trimmed_text, is_string);
 		Err(String::from(message))
 	}
 }
@@ -435,6 +435,7 @@ fn load_basic_action_map_from_json(json: &str) -> Result<HashMap<String, JsonEle
 				Some(JsonContainer::HashMap(_)) => {
 					key = String::from(current_text.clone());
 					current_text.clear();
+					is_current_value_string = false;
 				}
 				_ => return Err(String::from("JSON string has a colon without a containing map")),
 			}
@@ -443,9 +444,7 @@ fn load_basic_action_map_from_json(json: &str) -> Result<HashMap<String, JsonEle
 		} else if char == '"' || char == '\'' {
 			is_inside_string = true;
 			string_boundary = char;
-			if !key.is_empty() {
-				is_current_value_string = true;
-			}
+			is_current_value_string = true;
 		} else if is_inside_list && (!current_text.is_empty() || char != ' ') {
 			current_text.push(char);
 		}
