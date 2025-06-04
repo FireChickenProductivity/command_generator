@@ -521,8 +521,8 @@ fn is_line_action(line: &str) -> bool {
 
 
 
-struct RecordParser {
-	record: Vec<Entry>,
+struct RecordParser <'a> {
+	record: &'a mut Vec<Entry>,
 	current_command_name: String,
 	current_command_actions: Vec<BasicAction>,
 	seconds_since_last_action: Option<u32>,
@@ -530,10 +530,10 @@ struct RecordParser {
 	time_information_found_after_command: bool,
 }
 
-impl RecordParser {
-	pub fn new() -> Self {
+impl <'a> RecordParser <'a> {
+	pub fn new(record: &'a mut Vec<Entry>) -> Self {
 		RecordParser {
-			record: Vec::new(),
+			record: record,
 			current_command_name: String::new(),
 			current_command_actions: Vec::new(),
 			seconds_since_last_action: None,
@@ -634,13 +634,21 @@ impl RecordParser {
 		Ok(())
 	}
 
-	pub fn parse_file(&mut self, file: io::BufReader<File>) -> Result<Vec<Entry>, String> {
+	pub fn parse_file(&mut self, file: io::BufReader<File>) -> Result<(), String> {
 		self.parse_file_lines(file);
 		if self.is_command_found() {
 			self.add_current_command()?;
 		}
-		Ok(self.record.clone())
+		Ok(())
 	}
+}
+
+fn read_file_record(file: File) -> Result<Vec<Entry>, String> {
+	let reader = io::BufReader::new(file);
+	let mut record: Vec<Entry> = Vec::new();
+	let mut parser = RecordParser::new(&mut record);
+	parser.parse_file(reader);
+	Ok(record)
 }
 
 #[cfg(test)]
