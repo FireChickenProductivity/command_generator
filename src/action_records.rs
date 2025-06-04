@@ -569,13 +569,40 @@ impl RecordParser {
 		!self.current_command_name.is_empty() && !self.current_command_actions.is_empty()
 	}
 
+	fn add_action_based_on_line(&mut self, line: &str) -> Result<(), String> {
+		let action = load_basic_action_from_json(line)?;
+		self.current_command_actions.push(action);
+		Ok(())
+	}
+
+	fn add_current_command_if_available(&mut self) -> Result<(), String> {
+		if self.is_command_found() {
+			self.add_current_command()?;
+		}
+		Ok(())
+	}
+	
+	fn process_command_start(&mut self, line: &str) -> Result<(), String> {
+		self.add_current_command_if_available()?;
+		self.current_command_name = compute_command_name_without_prefix(line)?;
+		Ok(())
+	}
+
+	fn process_time_difference(&mut self, line: &str) -> Result<(), String> {
+		self.seconds_since_last_action = self.seconds_since_last_action_for_next_command;
+		self.seconds_since_last_action_for_next_command = Some(compute_seconds_since_last_action(line)?);
+		self.time_information_found_after_command = true;
+		Ok(())
+	}
+
+	
+
 	fn parse_line(&mut self, line: &str) -> Result<(), String> {
 		
 		Ok(())
 	}
 
 	fn parse_file_lines(&mut self, file: io::BufReader<File>) -> Result<(), String> {
-		// Placeholder
 		for line in file.lines().map_while(Result::ok) {
 			self.parse_line(line.trim())?;
 		}
