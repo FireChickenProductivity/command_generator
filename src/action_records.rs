@@ -235,7 +235,7 @@ impl CommandChain {
 
 pub enum Entry {
 	RecordingStart,
-	Command,
+	Command(Command),
 }
 
 const COMMAND_NAME_PREFIX: &str = "Command: ";
@@ -520,7 +520,7 @@ fn is_line_action(line: &str) -> bool {
 
 
 struct RecordParser {
-	commands: Vec<Command>,
+	record: Vec<Entry>,
 	current_command_name: String,
 	current_command_actions: Vec<BasicAction>,
 	seconds_since_last_action: Option<u32>,
@@ -531,7 +531,7 @@ struct RecordParser {
 impl RecordParser {
 	pub fn new() -> Self {
 		RecordParser {
-			commands: Vec::new(),
+			record: Vec::new(),
 			current_command_name: String::new(),
 			current_command_actions: Vec::new(),
 			seconds_since_last_action: None,
@@ -550,9 +550,9 @@ impl RecordParser {
 	
 	fn add_current_command(&mut self) -> Result<(), String> {
 		if self.current_command_name.is_empty() {
-			return Err(format!("Command #{} has no name", self.commands.len() + 1));
+			return Err(format!("Command #{} has no name", self.record.len() + 1));
 		} else if self.current_command_actions.is_empty() {
-			return Err(format!("Command ({}) #{} has no actions", self.current_command_name, self.commands.len() + 1));
+			return Err(format!("Command ({}) #{} has no actions", self.current_command_name, self.record.len() + 1));
 		}
 
 		let seconds_since_last_action = self.compute_seconds_since_last_command();
@@ -561,7 +561,7 @@ impl RecordParser {
 			self.current_command_actions.clone(),
 			seconds_since_last_action,
 		);
-		self.commands.push(command);
+		self.record.push(Entry::Command(command));
 		Ok(())
 	}
 
@@ -595,7 +595,19 @@ impl RecordParser {
 		Ok(())
 	}
 
-	
+	fn process_recording_start(&mut self) -> Result<(), String> {
+		self.add_current_command_if_available()?;
+		self.record.push(Entry::RecordingStart);
+		self.current_command_name.clear();
+		Ok(())
+	}
+
+	fn reset_command_information_except_name(&mut self) {
+		self.current_command_actions.clear();
+		self.seconds_since_last_action = None;
+		self.seconds_since_last_action_for_next_command = None;
+		self.time_information_found_after_command = false;
+	}
 
 	fn parse_line(&mut self, line: &str) -> Result<(), String> {
 		
