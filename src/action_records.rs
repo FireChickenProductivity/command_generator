@@ -471,6 +471,54 @@ fn load_basic_action_from_json(json: &str) -> Result<BasicAction, String> {
 	Ok(action)
 }
 
+fn compute_command_name_without_prefix(name: &str) -> Result<String, String> {
+	if name.starts_with(COMMAND_NAME_PREFIX) {
+		let name_without_prefix = &name[COMMAND_NAME_PREFIX.len()..];
+		if name_without_prefix.is_empty() {
+			return Err(format!("Command name text is empty after removing prefix '{}'", COMMAND_NAME_PREFIX));
+		}
+		Ok(name_without_prefix.to_string())
+	} else {
+		let message = format!("Command name text does not start with prefix '{}': {}", COMMAND_NAME_PREFIX, name);
+		Err(message)
+	}
+}
+
+fn compute_seconds_since_last_action(time_record: &str) -> Result<u32, String> {
+	if time_record.starts_with(TIME_DIFFERENCE_PREFIX) {
+		let time_text = &time_record[TIME_DIFFERENCE_PREFIX.len()..];
+		if let Ok(seconds) = time_text.parse::<u32>() {
+			Ok(seconds)
+		} else {
+			Err(format!("Invalid time difference format: {}", time_text))
+		}
+	} else {
+		Err(format!("Time record does not start with '{}': {}", TIME_DIFFERENCE_PREFIX, time_record))
+	}
+}
+
+fn is_line_time_difference(line: &str) -> bool {
+	line.starts_with(TIME_DIFFERENCE_PREFIX)
+}
+
+fn is_line_recording_start(line: &str) -> bool {
+	line == RECORDING_START_MESSAGE
+}
+
+fn is_line_command_start(line: &str) -> bool {
+	line.starts_with(COMMAND_NAME_PREFIX)
+}
+
+fn is_line_command_ending(line: &str) -> bool {
+	is_line_command_start(line) || is_line_recording_start(line)
+}
+
+fn is_line_action(line: &str) -> bool {
+	line.starts_with("{")
+}
+
+
+
 struct RecordParser {
 	commands: Vec<Command>,
 	current_command_name: String,
