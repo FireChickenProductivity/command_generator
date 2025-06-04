@@ -612,7 +612,18 @@ impl RecordParser {
 	}
 
 	fn parse_line(&mut self, line: &str) -> Result<(), String> {
-		
+		if is_line_action(line) {
+			self.add_action_based_on_line(line)?;
+		} else if is_line_command_start(line) {
+			self.process_command_start(line)?;
+		} else if is_line_time_difference(line) {
+			self.process_time_difference(line)?;
+		} else if is_line_recording_start(line) {
+			self.process_recording_start()?;
+		} 
+		if is_line_command_ending(line) {
+			self.reset_command_information_except_name();
+		} 
 		Ok(())
 	}
 
