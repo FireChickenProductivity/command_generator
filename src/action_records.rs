@@ -145,6 +145,7 @@ impl BasicAction {
 	}
 }
 
+#[derive(Clone)]
 pub struct Command {
 	name: String,
 	actions: Vec<BasicAction>,
@@ -233,6 +234,7 @@ impl CommandChain {
 	}
 }
 
+#[derive(Clone)]
 pub enum Entry {
 	RecordingStart,
 	Command(Command),
@@ -621,12 +623,12 @@ impl RecordParser {
 		Ok(())
 	}
 
-	pub fn parse_file(&mut self, file: io::BufReader<File>) -> Result<(), String> {
+	pub fn parse_file(&mut self, file: io::BufReader<File>) -> Result<Vec<Entry>, String> {
 		self.parse_file_lines(file);
 		if self.is_command_found() {
 			self.add_current_command()?;
 		}
-		Ok(())
+		Ok(self.record.clone())
 	}
 }
 
