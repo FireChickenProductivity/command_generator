@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fs::File;
+use std::io::{self, BufRead};
 
 #[derive(Clone)]
 #[derive(PartialEq)]
@@ -471,7 +472,6 @@ fn load_basic_action_from_json(json: &str) -> Result<BasicAction, String> {
 }
 
 struct RecordParser {
-	file: File,
 	commands: Vec<Command>,
 	current_command_name: String,
 	current_command_actions: Vec<BasicAction>,
@@ -481,9 +481,8 @@ struct RecordParser {
 }
 
 impl RecordParser {
-	pub fn new(input_file: File) -> Self {
+	pub fn new() -> Self {
 		RecordParser {
-			file: input_file,
 			commands: Vec::new(),
 			current_command_name: String::new(),
 			current_command_actions: Vec::new(),
@@ -522,18 +521,21 @@ impl RecordParser {
 		!self.current_command_name.is_empty() && !self.current_command_actions.is_empty()
 	}
 
-	fn process_line(&mut self, line: String) -> Result<(), String> {
-		// Placeholder
+	fn parse_line(&mut self, line: &str) -> Result<(), String> {
+		
 		Ok(())
 	}
 
-	fn parse_file_lines(&mut self) -> Result<(), String> {
+	fn parse_file_lines(&mut self, file: io::BufReader<File>) -> Result<(), String> {
 		// Placeholder
+		for line in file.lines().map_while(Result::ok) {
+			self.parse_line(line.trim())?;
+		}
 		Ok(())
 	}
 
-	pub fn parse_file(&mut self) -> Result<(), String> {
-		self.parse_file_lines();
+	pub fn parse_file(&mut self, file: io::BufReader<File>) -> Result<(), String> {
+		self.parse_file_lines(file);
 		if self.is_command_found() {
 			self.add_current_command()?;
 		}
