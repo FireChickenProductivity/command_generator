@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fs::File;
 
 #[derive(Clone)]
 #[derive(PartialEq)]
@@ -61,6 +62,7 @@ impl PartialEq for Argument {
 	
 }
 
+#[derive(Clone)]
 pub struct BasicAction {
 	name: String,
 	arguments: Vec<Argument>,
@@ -452,6 +454,91 @@ fn load_basic_action_map_from_json(json: &str) -> Result<HashMap<String, JsonEle
 	
 
 	handle_stack_result(&mut stack)
+}
+
+fn load_basic_action_from_json(json: &str) -> Result<BasicAction, String> {
+	let map = load_basic_action_map_from_json(json)?;
+	let name = match map.get("name") {
+		Some(JsonElement::String(name)) => name,
+		_ => return Err(String::from("JSON does not contain a name field")),
+	};
+	let arguments = match map.get("arguments") {
+		Some(JsonElement::Container(JsonContainer::Arguments(args))) => args,
+		_ => return Err(String::from("JSON does not contain an arguments field")),
+	};
+	let action = BasicAction::new(name, arguments.clone());
+	Ok(action)
+}
+
+struct RecordParser {
+	file: File,
+	commands: Vec<Command>,
+	current_command_name: String,
+	current_command_actions: Vec<BasicAction>,
+	seconds_since_last_action: Option<u32>,
+	seconds_since_last_action_for_next_command: Option<u32>,
+	time_information_found_after_command: bool,
+}
+
+impl RecordParser {
+	pub fn new(input_file: File) -> Self {
+		RecordParser {
+			file: input_file,
+			commands: Vec::new(),
+			current_command_name: String::new(),
+			current_command_actions: Vec::new(),
+			seconds_since_last_action: None,
+			seconds_since_last_action_for_next_command: None,
+			time_information_found_after_command: false,
+		}
+	}
+
+	fn compute_seconds_since_last_command(&self) -> Option<u32> {
+		if self.time_information_found_after_command {
+			self.seconds_since_last_action_for_next_command
+		} else {
+			self.seconds_since_last_action
+		}
+	}
+	
+	fn add_current_command(&mut self) -> Result<(), String> {
+		if self.current_command_name.is_empty() {
+			return Err(format!("Command #{} has no name", self.commands.len() + 1));
+		} else if self.current_command_actions.is_empty() {
+			return Err(format!("Command ({}) #{} has no actions", self.current_command_name, self.commands.len() + 1));
+		}
+
+		let seconds_since_last_action = self.compute_seconds_since_last_command();
+		let command = Command::new(
+			&self.current_command_name,
+			self.current_command_actions.clone(),
+			seconds_since_last_action,
+		);
+		self.commands.push(command);
+		Ok(())
+	}
+
+	fn is_command_found(&self) -> bool {
+		!self.current_command_name.is_empty() && !self.current_command_actions.is_empty()
+	}
+
+	fn process_line(&mut self, line: String) -> Result<(), String> {
+		// Placeholder
+		Ok(())
+	}
+
+	fn parse_file_lines(&mut self) -> Result<(), String> {
+		// Placeholder
+		Ok(())
+	}
+
+	pub fn parse_file(&mut self) -> Result<(), String> {
+		self.parse_file_lines();
+		if self.is_command_found() {
+			self.add_current_command()?;
+		}
+		Ok(())
+	}
 }
 
 #[cfg(test)]
