@@ -528,6 +528,7 @@ struct RecordParser <'a> {
 	seconds_since_last_action: Option<u32>,
 	seconds_since_last_action_for_next_command: Option<u32>,
 	time_information_found_after_command: bool,
+	line_number: usize,
 }
 
 impl <'a> RecordParser <'a> {
@@ -539,6 +540,7 @@ impl <'a> RecordParser <'a> {
 			seconds_since_last_action: None,
 			seconds_since_last_action_for_next_command: None,
 			time_information_found_after_command: false,
+			line_number: 0,
 		}
 	}
 
@@ -629,13 +631,18 @@ impl <'a> RecordParser <'a> {
 
 	fn parse_file_lines(&mut self, file: io::BufReader<File>) -> Result<(), String> {
 		for line in file.lines().map_while(Result::ok) {
-			self.parse_line(line.trim())?;
+			self.line_number += 1;
+			if let Err(message) = self.parse_line(line.trim()) {
+				return Err(format!("Error parsing line {}: {}", line, message));
+			}
 		}
 		Ok(())
 	}
 
 	pub fn parse_file(&mut self, file: io::BufReader<File>) -> Result<(), String> {
-		self.parse_file_lines(file)?;
+		if let Err(message) = self.parse_file_lines(file) {
+			return Err(format!("Error parsing file at line {}: {}", self.line_number, message));
+		}
 		if self.is_command_found() {
 			self.add_current_command()?;
 		}
