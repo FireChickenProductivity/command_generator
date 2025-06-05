@@ -635,7 +635,7 @@ impl <'a> RecordParser <'a> {
 	}
 
 	pub fn parse_file(&mut self, file: io::BufReader<File>) -> Result<(), String> {
-		self.parse_file_lines(file);
+		self.parse_file_lines(file)?;
 		if self.is_command_found() {
 			self.add_current_command()?;
 		}
@@ -643,11 +643,11 @@ impl <'a> RecordParser <'a> {
 	}
 }
 
-fn read_file_record(file: File) -> Result<Vec<Entry>, String> {
+pub fn read_file_record(file: File) -> Result<Vec<Entry>, String> {
 	let reader = io::BufReader::new(file);
 	let mut record: Vec<Entry> = Vec::new();
 	let mut parser = RecordParser::new(&mut record);
-	parser.parse_file(reader);
+	parser.parse_file(reader)?;
 	Ok(record)
 }
 
