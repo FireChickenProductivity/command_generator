@@ -462,8 +462,8 @@ fn load_basic_action_map_from_json(json: &str) -> Result<HashMap<String, JsonEle
 fn load_basic_action_from_json(json: &str) -> Result<BasicAction, String> {
 	let map = load_basic_action_map_from_json(json)?;
 	let name = match map.get("name") {
-		Some(JsonElement::String(name)) => name,
-		_ => return Err(String::from("JSON does not contain a name field")),
+		Some(JsonElement::Argument(Argument::StringArgument(name))) => name,
+		_ => return Err(format!("JSON does not contain a name field {:?}", map)),
 	};
 	let arguments = match map.get("arguments") {
 		Some(JsonElement::Container(JsonContainer::Arguments(args))) => args,
@@ -633,7 +633,7 @@ impl <'a> RecordParser <'a> {
 		for line in file.lines().map_while(Result::ok) {
 			self.line_number += 1;
 			if let Err(message) = self.parse_line(line.trim()) {
-				return Err(format!("Error parsing line {}: {}", line, message));
+				return Err(format!("Error parsing line ({})\n	{}", line, message));
 			}
 		}
 		Ok(())

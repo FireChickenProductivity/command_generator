@@ -18,6 +18,6 @@ fn main() {
 				}
 			}
 		},
-		Err(e) => println!("Error reading record file: {}", e),
+		Err(e) => println!("Error reading record file:\n	{}", e),
 	}
 } 
