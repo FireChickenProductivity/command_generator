@@ -276,49 +276,30 @@ enum JsonContainer {
 	HashMap(HashMap<String, JsonElement>),
 }
 
-fn handle_stack_result(stack: &mut Vec<JsonContainer>) -> Result<HashMap<String, JsonElement>, String> {
-	if stack.is_empty() {
-		Err(String::from("JSON string is empty or not properly formatted."))
-	} else if stack.len() > 1 {
-		Err(String::from("JSON string has unclosed container"))
-	} else {
-		let result = stack.pop().unwrap();
-		match result {
-			JsonContainer::HashMap(map) => {
-				Ok(map)
-			}
-			_ => Err(String::from("JSON string does not represent a valid action map.")),
-		}
-	}
-}
-
 fn add_current_item(
-	stack: &mut Vec<JsonContainer>,
+	arguments: &mut Vec<Argument>,
+	name: &mut String,
 	key: &mut String,
 	value_text: &mut String,
 	is_current_value_string: &mut bool,
+	is_inside_list: bool
 ) -> Result<(), String> {
-	if stack.is_empty() {
-		return Err(String::from("JSON string has no open container to add item to"));
-	} else if value_text.is_empty() {
+	if value_text.is_empty() {
 		let message = format!("called add_current_item with key: |{}|, value_text: |{}|, is_current_value_string: {}\n", key, value_text, is_current_value_string);
 		return Err(String::from(message));
 	}
 
-	match stack.last_mut().unwrap() {
-		JsonContainer::HashMap(map) => {
-			if key.is_empty() {
-				return Err(String::from("JSON string has empty key for item"));
-			}
-			let argument = JsonElement::Argument(parse_basic_action_json_argument_element(value_text, *is_current_value_string)?);
-			map.insert(key.clone(), argument);
-			key.clear();
+	if key == "name" {
+		if !name.is_empty() {
+			return Err(String::from("JSON string has multiple name fields"));
 		}
-		JsonContainer::Arguments(arguments) => {
-			let argument = parse_basic_action_json_argument_element(value_text, *is_current_value_string)?;
-			arguments.push(argument);
-		}
+		*name = value_text.clone();
+		key.clear();
+	} else if key == "arguments" && is_inside_list {
+		let argument = parse_basic_action_json_argument_element(value_text, *is_current_value_string)?;
+		arguments.push(argument);
 	}
+
 	value_text.clear();
 	*is_current_value_string = false;
 	Ok(())
@@ -337,17 +318,18 @@ fn load_talon_capture_from_map(map: &HashMap<String, JsonElement>) -> Result<Tal
 	};
 }
 
-fn load_basic_action_map_from_json(json: &str) -> Result<HashMap<String, JsonElement>, String> {
-	let mut stack: Vec<JsonContainer> = Vec::new();
+fn load_basic_action_from_json(json: &str) -> Result<BasicAction, String> {
 	let text = json.trim();
+	let mut name = String::new();
+	let mut arguments: Vec<Argument> = Vec::new();
 	let mut key = String::new();
 	let mut is_inside_string = false;
 	let mut is_inside_list = false;
-	let mut argument_key = String::new();
 	let mut is_current_value_string = false;
 	let mut current_text = String::new();
 	let mut escape_next_character = false;
 	let mut string_boundary = '"';
+	let mut unclosed_opening_braces = 0;
 	for char in text.chars() {
 		if is_inside_string {
 			if char == '\\' {
@@ -368,84 +350,50 @@ fn load_basic_action_map_from_json(json: &str) -> Result<HashMap<String, JsonEle
 				current_text.push(char);
 			}
 		} else if char == '{' {
-			stack.push(JsonContainer::HashMap(HashMap::new()));
+			unclosed_opening_braces += 1;
 		} else if char == '[' {
+			if is_inside_list {
+				return Err(String::from("JSON string has nested lists, which is not permitted"));
+			}
 			is_inside_list = true;
 			if key.is_empty() {
 				return Err(String::from("List encountered without a key"));
-			} else {
-				argument_key = key.clone();
-				key.clear();
 			}
-			if stack.len() < 1 {
+			if unclosed_opening_braces != 1 {
 				return Err(String::from("List encountered without containing map"));
-			} else {
-				stack.push(JsonContainer::Arguments(Vec::new()));
-			}
+			} 
 		} else if char == '}' {
-			if stack.is_empty() {
+			if unclosed_opening_braces == 0 {
 				return Err(String::from("JSON string has extraneous closing brace"));
 			}
+			unclosed_opening_braces -= 1;
 			if !key.is_empty() || !current_text.is_empty() || is_current_value_string {
-				add_current_item(&mut stack, &mut key, &mut current_text, &mut is_current_value_string)?;
+				add_current_item(&mut arguments, &mut name, &mut key, &mut current_text, &mut is_current_value_string, is_inside_list)?;
 			}
-			if stack.len() == 1 {
-				if let JsonContainer::Arguments(_) = stack.last().unwrap() {
-					return Err(String::from("JSON string has a list at the top level, which is not permitted"));
-				}
-			} else {
-				let container = stack.pop().unwrap();
-				if let JsonContainer::HashMap(map) = container {
-					if stack.len() > 0 {
-						if let JsonContainer::Arguments(arguments) = stack.last_mut().unwrap() {
-							let capture = load_talon_capture_from_map(&map)?;
-							arguments.push(Argument::CaptureArgument(capture))
-						}
-					} else {
-						return Err(String::from("Found a map not contained by a list, which is not permitted"));
-					}
-				} else {
-					return Err(String::from("JSON string has mismatched braces"));
-				}
-			}
+			
 		} else if char == ']' {
-			is_inside_list = false;
-			if stack.len() < 2 {
-				return Err(String::from("JSON string has extraneous closing bracket"));
-			} else {
-				if !current_text.is_empty() {
-					add_current_item(&mut stack, &mut key, &mut current_text, &mut is_current_value_string)?;
-				}
-				let container = stack.pop().unwrap();
-				if let JsonContainer::Arguments(arguments) = container {
-					if let JsonContainer::HashMap(map) = stack.last_mut().unwrap() {
-						if argument_key.is_empty() {
-							return Err(String::from("JSON string has empty key for arguments"));
-						} else {
-							map.insert(argument_key.clone(), JsonElement::Container(JsonContainer::Arguments(arguments)));
-							argument_key.clear();
-						}
-					} else {
-						return Err(String::from("JSON string has mismatched brackets"));
-					}
-				} else {
-					return Err(String::from("JSON string has mismatched brackets"));
-				}
+			if !is_inside_list {
+				return Err(String::from("JSON string has a closing bracket without an opening bracket"));
 			}
+			
+			if !current_text.is_empty() {
+				add_current_item(&mut arguments, &mut name, &mut key, &mut current_text, &mut is_current_value_string, is_inside_list)?;
+			}
+			
+			is_inside_list = false;
+			key.clear();
 		} else if char == ':' {
 			if !key.is_empty() {
 				return Err(format!("JSON string has a colon with a predefined key: {}", key));
 			}
-			match stack.last_mut() {
-				Some(JsonContainer::HashMap(_)) => {
-					key = String::from(current_text.clone());
-					current_text.clear();
-					is_current_value_string = false;
-				}
-				_ => return Err(String::from("JSON string has a colon without a containing map")),
+			if unclosed_opening_braces == 0 {
+				return Err(String::from("JSON string has a colon without an opening brace"));
 			}
+			key = String::from(current_text.clone());
+			current_text.clear();
+			is_current_value_string = false;
 		} else if char == ',' {
-			add_current_item(&mut stack, &mut key, &mut current_text, &mut is_current_value_string)?;
+			add_current_item(&mut arguments, &mut name, &mut key, &mut current_text, &mut is_current_value_string, is_inside_list)?;
 		} else if char == '"' || char == '\'' {
 			is_inside_string = true;
 			string_boundary = char;
@@ -456,21 +404,16 @@ fn load_basic_action_map_from_json(json: &str) -> Result<HashMap<String, JsonEle
 	}
 	
 
-	handle_stack_result(&mut stack)
-}
-
-fn load_basic_action_from_json(json: &str) -> Result<BasicAction, String> {
-	let map = load_basic_action_map_from_json(json)?;
-	let name = match map.get("name") {
-		Some(JsonElement::Argument(Argument::StringArgument(name))) => name,
-		_ => return Err(format!("JSON does not contain a name field {:?}", map)),
-	};
-	let arguments = match map.get("arguments") {
-		Some(JsonElement::Container(JsonContainer::Arguments(args))) => args,
-		_ => return Err(String::from("JSON does not contain an arguments field")),
-	};
-	let action = BasicAction::new(name, arguments.clone());
-	Ok(action)
+	if is_inside_string {
+		return Err(String::from("JSON string ends with an unclosed string"));
+	} else if unclosed_opening_braces > 0 {
+		return Err(String::from("JSON string ends with unclosed braces"));
+	} else if is_inside_list {
+		return Err(String::from("JSON string ends with an unclosed list"));
+	} else if !key.is_empty() || !current_text.is_empty() || is_current_value_string {
+		return Err(String::from("JSON string ends with an incomplete key-value pair"));
+	}
+	Ok(BasicAction::new(&name, arguments))
 }
 
 fn compute_command_name_without_prefix(name: &str) -> Result<String, String> {
