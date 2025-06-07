@@ -282,7 +282,10 @@ fn add_current_item(
 	key: &mut String,
 	value_text: &mut String,
 	is_current_value_string: &mut bool,
-	is_inside_list: bool
+	is_inside_list: bool,
+	capture_name: &mut String,
+	capture_instance: &mut i32,
+	number_of_unclosed_braces: &mut i32,
 ) -> Result<(), String> {
 	if value_text.is_empty() {
 		let message = format!("called add_current_item with key: |{}|, value_text: |{}|, is_current_value_string: {}\n", key, value_text, is_current_value_string);
@@ -290,32 +293,39 @@ fn add_current_item(
 	}
 
 	if key == "name" {
-		if !name.is_empty() {
-			return Err(String::from("JSON string has multiple name fields"));
+		if *number_of_unclosed_braces == 2 {
+			*capture_name = value_text.clone();
+		} else {
+			if !name.is_empty() {
+				return Err(String::from("JSON string has multiple name fields"));
+			}
+			*name = value_text.clone();
 		}
-		*name = value_text.clone();
 		key.clear();
-	} else if key == "arguments" && is_inside_list {
+	} else if key == "instance" {
+		if *capture_instance != -1 {
+			return Err(String::from("JSON string has multiple instance fields"));
+		}
+		if let Ok(instance) = value_text.parse::<i32>() {
+			*capture_instance = instance;
+		} else {
+			return Err(format!("Invalid instance value: {}", value_text));
+		}
+		if *capture_instance < 0 {
+			return Err(String::from("Instance value cannot be negative"));
+		}
+		key.clear();
+		*capture_instance = -1;
+	} else if is_inside_list {
 		let argument = parse_basic_action_json_argument_element(value_text, *is_current_value_string)?;
 		arguments.push(argument);
+	} else {
+		return Err(format!("JSON string has a key '{}' without a list", key));
 	}
 
 	value_text.clear();
 	*is_current_value_string = false;
 	Ok(())
-}
-
-fn load_talon_capture_from_map(map: &HashMap<String, JsonElement>) -> Result<TalonCapture, String> {
-	let name = match map.get("name") {
-		Some(JsonElement::Argument(Argument::StringArgument(name))) => name,
-		_ => return Err(format!("Capture JSON does not contain a name field {:?}", map)),
-	};
-	match map.get("instance") {
-		Some(JsonElement::Argument(Argument::IntArgument(instance))) => {
-			return Ok(TalonCapture::new(name, *instance));
-		}
-		_ => return Err(format!("Capture JSON does not contain an instance field {:?}", map)),
-	};
 }
 
 fn load_basic_action_from_json(json: &str) -> Result<BasicAction, String> {
@@ -330,6 +340,8 @@ fn load_basic_action_from_json(json: &str) -> Result<BasicAction, String> {
 	let mut escape_next_character = false;
 	let mut string_boundary = '"';
 	let mut unclosed_opening_braces = 0;
+	let mut capture_name = String::new();
+	let mut capture_instance = -1;
 	for char in text.chars() {
 		if is_inside_string {
 			if char == '\\' {
@@ -354,7 +366,9 @@ fn load_basic_action_from_json(json: &str) -> Result<BasicAction, String> {
 		} else if char == '[' {
 			if is_inside_list {
 				return Err(String::from("JSON string has nested lists, which is not permitted"));
-			}
+			} else if key != "arguments" {
+				return Err(format!("JSON string has a list without a key 'arguments', found: {}", key));
+			} 
 			is_inside_list = true;
 			if key.is_empty() {
 				return Err(String::from("List encountered without a key"));
@@ -367,8 +381,13 @@ fn load_basic_action_from_json(json: &str) -> Result<BasicAction, String> {
 				return Err(String::from("JSON string has extraneous closing brace"));
 			}
 			unclosed_opening_braces -= 1;
+			if is_inside_list {
+				arguments.push(Argument::CaptureArgument(TalonCapture::new(&capture_name, capture_instance)));
+				capture_name.clear();
+				capture_instance = -1;
+			}
 			if !key.is_empty() || !current_text.is_empty() || is_current_value_string {
-				add_current_item(&mut arguments, &mut name, &mut key, &mut current_text, &mut is_current_value_string, is_inside_list)?;
+				add_current_item(&mut arguments, &mut name, &mut key, &mut current_text, &mut is_current_value_string, is_inside_list, &mut capture_name, &mut capture_instance, &mut unclosed_opening_braces)?;
 			}
 			
 		} else if char == ']' {
@@ -377,7 +396,7 @@ fn load_basic_action_from_json(json: &str) -> Result<BasicAction, String> {
 			}
 			
 			if !current_text.is_empty() {
-				add_current_item(&mut arguments, &mut name, &mut key, &mut current_text, &mut is_current_value_string, is_inside_list)?;
+				add_current_item(&mut arguments, &mut name, &mut key, &mut current_text, &mut is_current_value_string, is_inside_list, &mut capture_name, &mut capture_instance, &mut unclosed_opening_braces)?;
 			}
 			
 			is_inside_list = false;
@@ -393,7 +412,7 @@ fn load_basic_action_from_json(json: &str) -> Result<BasicAction, String> {
 			current_text.clear();
 			is_current_value_string = false;
 		} else if char == ',' {
-			add_current_item(&mut arguments, &mut name, &mut key, &mut current_text, &mut is_current_value_string, is_inside_list)?;
+			add_current_item(&mut arguments, &mut name, &mut key, &mut current_text, &mut is_current_value_string, is_inside_list, &mut capture_name, &mut capture_instance, &mut unclosed_opening_braces)?;
 		} else if char == '"' || char == '\'' {
 			is_inside_string = true;
 			string_boundary = char;
