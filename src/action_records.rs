@@ -193,7 +193,7 @@ impl Command {
 	}
 }
 
-struct CommandChain {
+pub struct CommandChain {
 	command: Command,
 	chain_number: u32,
 	chain_size: u32,
