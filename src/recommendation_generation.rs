@@ -497,37 +497,36 @@ fn compute_number_of_actions(actions: &Vec<BasicAction>) -> usize {
 }
 
 impl PotentialCommandInformation {
-	fn new(actions: Vec<BasicAction>) -> Self {
-		let number_of_actions = compute_number_of_actions(&actions);
+	pub fn new(actions: Vec<BasicAction>) -> Self {
 		PotentialCommandInformation {
 			actions,
 			number_of_times_used: 0,
 			total_number_of_words_dictated: 0,
-			number_of_actions: number_of_actions,
+			number_of_actions: 0,
 			chain: None,
 		}
 	}
 
-	fn get_number_of_actions(&self) -> usize {
-		self.actions.len()
+	pub fn get_number_of_actions(&self) -> usize {
+		self.number_of_actions
 	}
 
-	fn get_average_words_dictated(&self) -> f32 {
+	pub fn get_average_words_dictated(&self) -> f32 {
 		if self.number_of_times_used == 0 {
 			return 0.0;
 		}
 		self.total_number_of_words_dictated as f32 / self.number_of_times_used as f32
 	}
 
-	fn get_number_of_times_used(&self) -> u32 {
+	pub fn get_number_of_times_used(&self) -> u32 {
 		self.number_of_times_used
 	}
 
-	fn get_actions(&self) -> &Vec<BasicAction> {
+	pub fn get_actions(&self) -> &Vec<BasicAction> {
 		&self.actions
 	}
 
-	fn process_usage(&mut self, command_chain: &CommandChain) {
+	pub fn process_usage(&mut self, command_chain: &CommandChain) {
 		if self.should_process_usage(command_chain.get_chain_number()) {
 			self.process_relevant_usage(command_chain);
 		}
@@ -546,7 +545,7 @@ impl PotentialCommandInformation {
 		self.total_number_of_words_dictated += compute_number_of_words(command_chain);
 	}
 
-	fn get_number_of_words_saved(&self) -> u32 {
+	pub fn get_number_of_words_saved(&self) -> u32 {
 		self.get_number_of_times_used() * (self.get_average_words_dictated() as u32 - 1)
 	}
 }
@@ -555,29 +554,78 @@ pub struct ActionSet {
 	set: HashSet<String>,
 }
 
-fn compute_string_representation_of_actions(actions: &Vec<BasicAction>) -> String {
+pub fn compute_string_representation_of_actions(actions: &Vec<BasicAction>) -> String {
 	actions.iter().map(|action| action.to_json()).collect::<Vec<String>>().join("")
 }
 
 impl ActionSet {
-	fn new() -> Self {
+	pub fn new() -> Self {
 		Self {
 			set: HashSet::new(),
 		}
 	}
 
-	fn insert(&mut self, actions: &Vec<BasicAction>) {
+	pub fn insert(&mut self, actions: &Vec<BasicAction>) {
 		let representation = compute_string_representation_of_actions(actions);
 		self.set.insert(representation);
 	}
 
-	fn contains(&self, actions: &Vec<BasicAction>) -> bool {
+	pub fn contains(&self, actions: &Vec<BasicAction>) -> bool {
 		let representation = compute_string_representation_of_actions(actions);
 		self.set.contains(&representation)
 	}
 
-	fn get_size(&self) -> usize {
+	pub fn get_size(&self) -> usize {
 		self.set.len()
 	}
 }
 
+pub struct AbstractCommandInstantiation {
+	pub command_chain: CommandChain,
+	pub concrete_command: CommandChain,
+	pub words_saved: u32,
+}
+
+pub struct PotentialAbstractCommandInformation {
+	instantiation_set: ActionSet,
+	number_of_words_saved: u32,
+	info: PotentialCommandInformation,
+}
+
+impl PotentialAbstractCommandInformation {
+	pub fn new(instantiation: AbstractCommandInstantiation) -> Self {
+		let actions = instantiation.command_chain.get_command().get_actions();
+		let potential_command_information = PotentialCommandInformation::new(actions.clone());
+		Self {
+			instantiation_set: ActionSet::new(),
+			number_of_words_saved: instantiation.words_saved,
+			info: potential_command_information,
+		}
+	}
+
+	pub fn process_usage(&mut self, instantiation: AbstractCommandInstantiation) {
+		let chain_number = instantiation.command_chain.get_chain_number();
+		if self.info.should_process_usage(chain_number) {
+			let actions = instantiation.concrete_command.get_command().get_actions();
+			self.instantiation_set.insert(&actions);
+			self.info.process_relevant_usage(&instantiation.command_chain);
+			self.number_of_words_saved += instantiation.words_saved;
+		}
+	}
+
+	pub fn get_number_of_instantiations(&self) -> usize {
+		self.instantiation_set.get_size()
+	}
+
+	pub fn get_number_of_words_saved(&self) -> u32 {
+		self.number_of_words_saved
+	}
+
+	pub fn get_instantiation_set(&self) -> &ActionSet {
+		&self.instantiation_set
+	}
+
+	pub fn get_potential_command_information(&self) -> &PotentialCommandInformation {
+		&self.info
+	}
+}
