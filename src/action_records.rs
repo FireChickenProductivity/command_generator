@@ -402,7 +402,7 @@ fn load_basic_action_from_json(json: &str) -> Result<BasicAction, String> {
 			is_inside_list = false;
 			key.clear();
 		} else if char == ':' {
-			if !key.is_empty() {
+			if !key.is_empty() && !is_inside_list {
 				return Err(format!("JSON string has a colon with a predefined key: {}", key));
 			}
 			if unclosed_opening_braces == 0 {
