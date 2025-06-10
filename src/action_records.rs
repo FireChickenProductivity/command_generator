@@ -640,135 +640,72 @@ mod tests {
 		assert_eq!(action.compute_talon_script(), talon_script);
 	}
 
-	fn assert_keys_match(
-		expected: &HashMap<String, JsonElement>,
-		actual: &HashMap<String, JsonElement>,
-	) {
-		for key in expected.keys() {
-			assert!(actual.contains_key(key), "Key {} not found in actual map", key);
-		}
-		for key in actual.keys() {
-			assert!(expected.contains_key(key), "Key {} not found in expected map", key);
-		}
-	}
-
-	fn treat_json_element_as_string_with_panic(element: &JsonElement) -> &String {
-		match element {
-			JsonElement::String(s) => s,
-			JsonElement::Argument(arg) => match arg {
-				Argument::StringArgument(s) => s,
-				_ => panic!("Expected a string argument, found something else"),
-			},
-			JsonElement::Container(_) => panic!("Expected a string, found a container"),
-		}
-	}
-
-	fn treat_json_element_as_arguments_with_panic(
-		element: &JsonElement,
-	) -> &Vec<Argument> {
-		match element {
-			JsonElement::Container(JsonContainer::Arguments(args)) => args,
-			_ => panic!("Expected an arguments container, found something else"),
-		}
-	}
-
-	fn assert_map_content_match(
-		expected: &HashMap<String, JsonElement>,
-		actual: &HashMap<String, JsonElement>,
-	) {
-		let expected_name = treat_json_element_as_string_with_panic(
-			expected.get("name").unwrap()
-		);
-		let actual_name = treat_json_element_as_string_with_panic(
-			actual.get("name").unwrap()
-		);
-		assert_eq!(expected_name, actual_name, "Action names do not match");
-		let expected_arguments = treat_json_element_as_arguments_with_panic(
-			expected.get("arguments").unwrap()
-		);
-		let actual_arguments = treat_json_element_as_arguments_with_panic(
-			actual.get("arguments").unwrap()
-		);
-		assert_eq!(expected_arguments.len(), actual_arguments.len(), "Number of arguments do not match");
-		for (i, expected_argument) in expected_arguments.iter().enumerate() {
-			let actual_argument = &actual_arguments[i];
+	fn assert_actions_match(action: &BasicAction, name: &str, arguments: &Vec<Argument>) {
+		assert_eq!(action.get_name(), name, "Action name does not match");
+		assert_eq!(action.get_arguments().len(), arguments.len(), "Number of arguments do not match");
+		for (i, expected_argument) in arguments.iter().enumerate() {
+			let actual_argument = &action.get_arguments()[i];
 			assert_eq!(expected_argument, actual_argument, "Argument at index {} does not match", i);
 		}
-	}
-
-	fn assert_maps_match(
-		expected: &HashMap<String, JsonElement>,
-		actual: &HashMap<String, JsonElement>,
-	) {
-		assert_keys_match(expected, actual);
-		assert_map_content_match(expected, actual);
+		
 	}
 	
-	fn assert_map_matches_expected_from_string(
+	fn assert_action_matches_expected_from_string(
 		name: &str,
 		arguments: &Vec<Argument>,
 		text: &str,
 	) {
-		let mut expected = HashMap::new();
-		expected.insert(
-			String::from("name"),
-			JsonElement::String(String::from(name)),
-		);
-		expected.insert(
-			String::from("arguments"),
-			JsonElement::Container(JsonContainer::Arguments(arguments.clone())),
-		);
-		let actual_result = load_basic_action_map_from_json(text);
+		
+		let actual_result = load_basic_action_from_json(text);
 		match actual_result {
 			Ok(actual) => {
-				assert_eq!(actual.len(), expected.len());
-				assert_maps_match(&expected, &actual);
+				assert_actions_match(&actual, name, arguments);
 			}
 			Err(message) => {
-				panic!("Error parsing JSON: {}", message);
+				panic!("Error parsing JSON:\n    {}", message);
 			}
 		}
 	}
 	
 	#[test]
-	fn test_insert_map() {
+	fn test_insert_action() {
 		let name = String::from("insert");
 		let arguments = vec![Argument::StringArgument(String::from("text"))];
 		let json = r#"{"name": "insert", "arguments": ["text"]}"#;
-		assert_map_matches_expected_from_string(&name, &arguments, json);
+		assert_action_matches_expected_from_string(&name, &arguments, json);
 	}
 
 	#[test]
-	fn test_insert_capture_map() {
+	fn test_insert_capture_action() {
 		let name = String::from("insert");
 		let arguments = vec![Argument::CaptureArgument(TalonCapture::new("capture_name", 1))];
 		let json = r#"{"name": "insert", "arguments": [{"name": "capture_name", "instance": 1}]}"#;
-		assert_map_matches_expected_from_string(&name, &arguments, json);
+		assert_action_matches_expected_from_string(&name, &arguments, json);
 	}
 
 	#[test]
-	fn test_mouse_move_map() {
+	fn test_mouse_move_action() {
 		let name = String::from("mouse_move");
 		let arguments = vec![
 			Argument::IntArgument(100),
 			Argument::IntArgument(200),
 		];
 		let json = r#"{"name": "mouse_move", "arguments": [100, 200]}"#;
-		assert_map_matches_expected_from_string(&name, &arguments, json);
+		assert_action_matches_expected_from_string(&name, &arguments, json);
 	}
 
 	#[test]
-	fn test_mouse_click_map() {
+	fn test_mouse_click_action() {
 		let name = String::from("mouse_click");
 		let arguments = vec![
 			Argument::IntArgument(1),
 		];
 		let json = r#"{"name": "mouse_click", "arguments": [1]}"#;
-		assert_map_matches_expected_from_string(&name, &arguments, json);
+		assert_action_matches_expected_from_string(&name, &arguments, json);
 	}
 
 	#[test]
-	fn test_mouse_scroll_map() {
+	fn test_mouse_scroll_action() {
 		let name = String::from("mouse_scroll");
 		let arguments = vec![
 			Argument::IntArgument(0),
@@ -776,7 +713,7 @@ mod tests {
 			Argument::BoolArgument(true),
 		];
 		let json = r#"{"name": "mouse_scroll", "arguments": [0, 1, true]}"#;
-		assert_map_matches_expected_from_string(&name, &arguments, json);
+		assert_action_matches_expected_from_string(&name, &arguments, json);
 	}
 
 }
