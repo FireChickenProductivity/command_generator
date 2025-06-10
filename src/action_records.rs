@@ -315,7 +315,6 @@ fn add_current_item(
 			return Err(String::from("Instance value cannot be negative"));
 		}
 		key.clear();
-		*capture_instance = -1;
 	} else if is_inside_list {
 		let argument = parse_basic_action_json_argument_element(value_text, *is_current_value_string)?;
 		arguments.push(argument);
@@ -381,15 +380,15 @@ fn load_basic_action_from_json(json: &str) -> Result<BasicAction, String> {
 				return Err(String::from("JSON string has extraneous closing brace"));
 			}
 			unclosed_opening_braces -= 1;
-			if is_inside_list {
+			if !key.is_empty() || !current_text.is_empty() || is_current_value_string {
+				add_current_item(&mut arguments, &mut name, &mut key, &mut current_text, &mut is_current_value_string, is_inside_list, &mut capture_name, &mut capture_instance, &mut unclosed_opening_braces)?;
+			}
+
+			if is_inside_list && unclosed_opening_braces == 1 {
 				arguments.push(Argument::CaptureArgument(TalonCapture::new(&capture_name, capture_instance)));
 				capture_name.clear();
 				capture_instance = -1;
 			}
-			if !key.is_empty() || !current_text.is_empty() || is_current_value_string {
-				add_current_item(&mut arguments, &mut name, &mut key, &mut current_text, &mut is_current_value_string, is_inside_list, &mut capture_name, &mut capture_instance, &mut unclosed_opening_braces)?;
-			}
-			
 		} else if char == ']' {
 			if !is_inside_list {
 				return Err(String::from("JSON string has a closing bracket without an opening bracket"));
