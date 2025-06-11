@@ -465,7 +465,7 @@
 //         return representation
 
 const FIVE_MINUTES_IN_SECONDS: u32 = 5 * 60;
-const DEFAULT_MAX_PROSE_SIZE_TO_CONSIDER: u32 = 10;
+const DEFAULT_MAX_PROSE_SIZE_TO_CONSIDER: usize = 10;
 use crate::action_records::{
 	Argument,
 	BasicAction,
@@ -489,10 +489,10 @@ fn compute_number_of_words(command_chain: &CommandChain) -> u32 {
 
 pub struct PotentialCommandInformation {
 	actions: Vec<BasicAction>,
-	number_of_times_used: u32,
+	number_of_times_used: usize,
 	total_number_of_words_dictated: u32,
 	number_of_actions: usize,
-	chain: Option<u32>,
+	chain: Option<usize>,
 }
 
 fn compute_number_of_actions(actions: &Vec<BasicAction>) -> usize {
@@ -532,7 +532,7 @@ impl PotentialCommandInformation {
 		self.total_number_of_words_dictated as f32 / self.number_of_times_used as f32
 	}
 
-	pub fn get_number_of_times_used(&self) -> u32 {
+	pub fn get_number_of_times_used(&self) -> usize {
 		self.number_of_times_used
 	}
 
@@ -546,7 +546,7 @@ impl PotentialCommandInformation {
 		}
 	}
 
-	fn should_process_usage(&self, chain: u32) -> bool {
+	fn should_process_usage(&self, chain: usize) -> bool {
 		match self.chain {
 			Some(existing_chain) => existing_chain < chain,
 			None => true,
@@ -560,7 +560,7 @@ impl PotentialCommandInformation {
 	}
 
 	pub fn get_number_of_words_saved(&self) -> u32 {
-		self.get_number_of_times_used() * (self.get_average_words_dictated() as u32 - 1)
+		self.get_number_of_times_used() as u32 * (self.get_average_words_dictated() as u32 - 1)
 	}
 }
 
@@ -957,19 +957,66 @@ fn basic_command_filter(info: &Information) -> bool {
 }
 
 fn is_command_after_chain_start_exceeding_time_gap_threshold(
-	record_entry: &Entry,
+	record_entry: &Command,
 	chain_start_index: usize,
 	current_chain_index: usize,
 ) -> bool {
+	match record_entry.get_seconds_since_last_action() {
+		Some(seconds) => current_chain_index > chain_start_index && 
+								seconds > FIVE_MINUTES_IN_SECONDS,
+		None => false,
+	}
+}
+
+fn should_command_chain_not_cross_entry_at_record_index(
+	record: &[Entry],
+	chain_start_index: usize,
+	current_chain_index: usize,
+) -> bool {
+	let record_entry = &record[current_chain_index];
 	match record_entry {
 		Entry::RecordingStart => true,
 		Entry::Command(record_entry) => {
-			match record_entry.get_seconds_since_last_action() {
-				Some(seconds) => current_chain_index > chain_start_index && 
-										seconds > FIVE_MINUTES_IN_SECONDS,
-				None => false,
-			}
+			is_command_after_chain_start_exceeding_time_gap_threshold(&record_entry, chain_start_index, current_chain_index)
 		}
 	}
+}
+
+fn add_next_record_command_to_chain(
+	record: &[Entry],
+	command_chain: &mut CommandChain,
+) {
+	match &record[command_chain.get_next_chain_index()] {
+		Entry::Command(command) => {
+			command_chain.append_command(command.clone());
+		}
+		_ => {
+			panic!("Expected a command entry at index {}, but found something else.", command_chain.get_next_chain_index());
+		}
+		
+	}
+}
+
+fn simplify_command_chain(command_chain: &CommandChain) -> CommandChain {
+	let mut simplified_chain = compute_insert_simplified_command_chain(command_chain);
+	simplified_chain = compute_repeat_simplified_command_chain(&simplified_chain);
+	simplified_chain
+}
+
+pub fn create_abstract_commands(command_chain: &CommandChain) -> Vec<Information> {
+	let mut commands = Vec::new();
+	if should_make_abstract_repeat_representation(command_chain) {
+		let abstract_repeat_representation = make_abstract_repeat_representation_for(command_chain);
+		commands.push(Information::Abstract(PotentialAbstractCommandInformation::new(abstract_repeat_representation)));
+	}
+	let abstract_prose_commands = make_abstract_prose_representations_for_command(command_chain, DEFAULT_MAX_PROSE_SIZE_TO_CONSIDER);
+	for abstract_command in abstract_prose_commands {
+		commands.push(Information::Abstract(PotentialAbstractCommandInformation::new(abstract_command)));
+	}
+	commands
+}
+
+pub struct CommandInformationSet {
+	commands: Vec<Information>,
 }
 

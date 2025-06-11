@@ -204,12 +204,12 @@ impl Command {
 #[derive(Clone)]
 pub struct CommandChain {
 	command: Command,
-	chain_number: u32,
-	chain_size: u32,
+	chain_number: usize,
+	chain_size: usize,
 }
 
 impl CommandChain {
-	pub fn new(command: Command, chain_number: u32, chain_size: u32) -> Self {
+	pub fn new(command: Command, chain_number: usize, chain_size: usize) -> Self {
 		CommandChain {
 			command,
 			chain_number,
@@ -221,19 +221,19 @@ impl CommandChain {
 		&self.command
 	}
 
-	pub fn get_chain_number(&self) -> u32 {
+	pub fn get_chain_number(&self) -> usize {
 		self.chain_number
 	}
 
-	pub fn get_chain_ending_index(&self) -> u32 {
+	pub fn get_chain_ending_index(&self) -> usize {
 		self.chain_number + self.chain_size - 1
 	}
 
-	pub fn get_next_chain_index(&self) -> u32 {
+	pub fn get_next_chain_index(&self) -> usize {
 		self.chain_number + self.chain_size
 	}
 
-	pub fn get_size(&self) -> u32 {
+	pub fn get_size(&self) -> usize {
 		self.chain_size
 	}
 
