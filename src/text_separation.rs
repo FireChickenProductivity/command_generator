@@ -85,6 +85,10 @@ struct TextSeparationAnalyzer {
 }
 
 impl TextSeparationAnalyzer {
+	pub fn new_from_text(text: &str) -> Self {
+		TextSeparationAnalyzer::new(text, is_character_alpha)
+	}
+
 	pub fn new(text: &str, character_filter: fn(char) -> bool) -> Self {
 		TextSeparationAnalyzer {
 			text_separation: TextSeparation::new(text, character_filter),
@@ -188,6 +192,10 @@ impl TextSeparationAnalyzer {
 		true
 	}
 
+	pub fn is_entire_text_separator_consistent(&self) -> bool {
+		self.is_separator_consistent(0, self.text_separation.get_separators().len())
+	}
+
 	pub fn get_prose_index(&self) -> Option<usize> {
 		self.prose_index
 	}
@@ -283,4 +291,94 @@ impl TextSeparationAnalyzer {
 		}
 	}
 
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	fn is_consistent_separator(target_text: &str) -> bool {
+		let analyzer = TextSeparationAnalyzer::new_from_text(target_text);
+		analyzer.is_entire_text_separator_consistent()
+	}
+
+	#[test]
+	fn test_consistent_separator_without_separators() {
+		assert!(is_consistent_separator("thisisatest"));
+	}
+
+	#[test]
+	fn test_handles_single_character_separator() {
+		assert!(is_consistent_separator("this_is_a_test"));
+	}
+
+	#[test]
+	fn test_inconsistent_separator_with_multiple_separators() {
+		assert!(!is_consistent_separator("this_is__a_test"));
+	}
+
+	#[test]
+	fn test_consistent_separator_with_multiple_characters() {
+		assert!(is_consistent_separator("this!!!!is!!!!a!!!!test"));
+	}
+
+	fn assert_text_before_prose_matches(original_text: &str, prose: &str, expected_text_before_prose: &str) {
+		let mut analyzer = TextSeparationAnalyzer::new_from_text(original_text);
+		analyzer.search_for_prose_in_separated_part(prose);
+		assert_eq!(analyzer.compute_text_before_prose(), expected_text_before_prose);
+	}
+
+	fn assert_text_after_prose_matches(original_text: &str, prose: &str, expected_text_after_prose: &str) {
+		let mut analyzer = TextSeparationAnalyzer::new_from_text(original_text);
+		analyzer.search_for_prose_in_separated_part(prose);
+		assert_eq!(analyzer.compute_text_after_prose(), expected_text_after_prose);
+	}
+
+	#[test]
+	fn test_can_find_empty_text_before_prose_with_one_word() {
+		assert_text_before_prose_matches("test", "test", "");
+	}
+
+	#[test]
+	fn test_can_find_text_before_prose_with_one_word() {
+		assert_text_before_prose_matches("test", "st", "te");
+	}
+
+	#[test]
+	fn test_can_find_text_before_prose_with_multiple_words() {
+		assert_text_before_prose_matches(
+			"_This is_a!test today",
+			"a test",
+			"_This is_",
+		);
+	}
+
+	#[test]
+	fn test_can_find_empty_text_after_prose_with_one_word() {
+		assert_text_after_prose_matches(
+			"test",
+			"test",
+			"",
+		);
+	}
+
+	#[test]
+	fn test_can_find_text_after_prose_with_one_word() {
+		assert_text_after_prose_matches(
+			"test",
+			"te",
+			"st",
+		);
+	}
+
+	#[test]
+	fn test_can_find_text_after_prose_with_multiple_words() {
+		assert_text_after_prose_matches(
+			"_This is_a!test today",
+			"is a",
+			"!test today",
+		);
+	}
+
+	
 }
