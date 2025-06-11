@@ -465,7 +465,7 @@
 //         return representation
 
 const FIVE_MINUTES_IN_SECONDS: u32 = 5 * 60;
-use crate::action_records::{BasicAction, CommandChain, Argument};
+use crate::action_records::{BasicAction, CommandChain, Argument, Command};
 use std::collections::HashSet;
 
 fn compute_number_of_words(command_chain: &CommandChain) -> u32 {
@@ -629,3 +629,35 @@ impl PotentialAbstractCommandInformation {
 		&self.info
 	}
 }
+
+fn create_repeat_action(repeat_count: i32) -> BasicAction {
+	BasicAction::new("repeat", vec![Argument::IntArgument(repeat_count)])
+}
+
+fn compute_repeat_simplified_command_chain(command_chain: &CommandChain) -> CommandChain {
+	let mut new_actions = Vec::new();
+	let mut last_non_repeat_action: Option<BasicAction> = None;
+	let mut repeat_count: i32 = 0;
+
+	for action in command_chain.get_command().get_actions() {
+
+		if last_non_repeat_action.is_some() && action == last_non_repeat_action.as_ref().unwrap() {
+			repeat_count += 1;
+		} else {
+			if repeat_count > 0 {
+				new_actions.push(create_repeat_action(repeat_count));
+				repeat_count = 0;
+			}
+			new_actions.push(action.clone());
+			last_non_repeat_action = Some(action.clone());
+		}
+	}
+
+	if repeat_count > 0 {
+		new_actions.push(create_repeat_action(repeat_count));
+	}
+
+	let new_command = Command::new(command_chain.get_command().get_name(), new_actions, command_chain.get_command().get_seconds_since_last_action());
+	CommandChain::new(new_command, command_chain.get_chain_number(), command_chain.get_size())
+}
+

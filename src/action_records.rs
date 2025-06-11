@@ -64,6 +64,7 @@ impl PartialEq for Argument {
 }
 
 #[derive(Clone)]
+#[derive(PartialEq)]
 pub struct BasicAction {
 	name: String,
 	arguments: Vec<Argument>,
