@@ -73,7 +73,7 @@ impl TextSeparation {
 	}
 }
 
-struct TextSeparationAnalyzer {
+pub struct TextSeparationAnalyzer {
 	text_separation: TextSeparation,
 	prose_index: Option<usize>,
 	final_prose_index_into_separated_parts: Option<usize>,
@@ -307,7 +307,7 @@ fn compute_case(text: &str) -> Option<String> {
 }
 
 /// This is an inefficient approach that should be changed later
-fn has_valid_case(analyzer: &TextSeparationAnalyzer) -> bool {
+pub fn has_valid_case(analyzer: &TextSeparationAnalyzer) -> bool {
 	analyzer.compute_prose_portion_of_text().iter().all(|word| compute_case(word).is_some())
 }
 
@@ -327,7 +327,7 @@ fn compute_simplified_case_strings_list(case_strings: Vec<String>) -> Vec<String
 	simplified_case_strings
 }
 
-fn compute_case_string_for_prose(analyzer: TextSeparationAnalyzer) -> String {
+pub fn compute_case_string_for_prose(analyzer: &TextSeparationAnalyzer) -> String {
 	let prose = analyzer.compute_prose_portion_of_text();
 	let case_strings: Vec<String> = prose.iter()
 		.filter_map(|prose_word| compute_case(prose_word))
@@ -463,7 +463,7 @@ mod tests {
 	fn assert_prose_case_matches_expected(text: &str, prose: &str, expected_case: &str) {
 		let mut analyzer = TextSeparationAnalyzer::new_from_text(text);
 		analyzer.search_for_prose_in_separated_part(prose);
-		let case_string = compute_case_string_for_prose(analyzer);
+		let case_string = compute_case_string_for_prose(&analyzer);
 		assert_eq!(case_string, expected_case);
 	}
 

@@ -465,8 +465,21 @@
 //         return representation
 
 const FIVE_MINUTES_IN_SECONDS: u32 = 5 * 60;
-use crate::action_records::{Argument, BasicAction, Command, CommandChain, TalonCapture};
+const DEFAULT_MAX_PROSE_SIZE_TO_CONSIDER: u32 = 10;
+use crate::action_records::{
+	Argument,
+	BasicAction,
+	Command,
+	CommandChain,
+	TalonCapture,
+	Entry
+};
 use crate::action_utilities::*;
+use crate::text_separation::{
+	TextSeparationAnalyzer,
+	compute_case_string_for_prose,
+	has_valid_case,
+};
 use std::collections::HashSet;
 
 fn compute_number_of_words(command_chain: &CommandChain) -> u32 {
@@ -631,6 +644,11 @@ impl PotentialAbstractCommandInformation {
 	}
 }
 
+enum Information {
+	Concrete(PotentialCommandInformation),
+	Abstract(PotentialAbstractCommandInformation),
+}
+
 fn create_repeat_action(repeat_count: i32) -> BasicAction {
 	BasicAction::new("repeat", vec![Argument::IntArgument(repeat_count)])
 }
@@ -731,3 +749,227 @@ fn make_abstract_repeat_representation_for(command_chain: &CommandChain) -> Abst
 		words_saved: words_saved as u32,
 	}
 }
+
+fn is_prose_inside_text_with_consistent_separator(prose: &str, text: &str) -> bool {
+	let mut text_separation_analyzer = TextSeparationAnalyzer::new_from_text(text);
+	text_separation_analyzer.search_for_prose_in_separated_part(prose);
+	text_separation_analyzer.is_prose_separator_consistent();
+	text_separation_analyzer.has_found_prose()
+}
+
+struct ProseMatch {
+	analyzer: TextSeparationAnalyzer,
+	name: String,
+}
+
+fn make_abstract_representation_for_prose_command(command_chain: &CommandChain, prose_match: &ProseMatch, insert_to_modify_index: usize) -> AbstractCommandInstantiation {
+	let analyzer = &prose_match.analyzer;
+	let actions = command_chain.get_command().get_actions();
+	let mut new_actions = actions[..insert_to_modify_index].to_vec();
+	
+	{
+		let text_before = analyzer.compute_text_before_prose();
+		if !text_before.is_empty() {
+			new_actions.push(create_insert_action(&text_before));
+		}
+	}
+	
+	let prose_argument = TalonCapture::new("user.text", 1);
+	new_actions.push(BasicAction::new(
+		"user.fire_chicken_auto_generated_command_action_insert_formatted_text",
+		vec![
+			Argument::CaptureArgument(prose_argument), Argument::StringArgument(compute_case_string_for_prose(&analyzer)), Argument::StringArgument(analyzer.get_first_prose_separator())
+		],
+	));
+	
+	{
+		let text_after = analyzer.compute_text_after_prose();
+		if !text_after.is_empty() {
+			new_actions.push(create_insert_action(&text_after));
+		}
+	}
+	
+	if insert_to_modify_index + 1 < actions.len() {
+		new_actions.extend_from_slice(&actions[insert_to_modify_index + 1..]);
+	}
+	
+	let new_command = compute_command_chain_copy_with_new_name_and_actions(command_chain, &prose_match.name, new_actions);
+	let words_saved = compute_number_of_words(&new_command) - 2;
+	AbstractCommandInstantiation {
+		command_chain: new_command,
+		concrete_command: command_chain.clone(),
+		words_saved: words_saved as u32,
+	}
+}
+
+struct InsertAction {
+	text: String,
+	index: usize,
+}
+
+fn obtain_inserts_from_command_chain(command_chain: &CommandChain) -> Vec<InsertAction> {
+	command_chain.get_command()
+		.get_actions()
+		.iter()
+		.enumerate()
+		.filter_map(|(index, action)| {
+			if is_insert(action) {
+				let insert_text = get_insert_text(action);
+				Some(InsertAction {
+					text: insert_text.to_string(),
+					index,
+				})
+			} else {
+				None
+			}
+		})
+		.collect()
+}
+
+fn generate_prose_command_name(words: &[&str], starting_index: usize, prose_size: usize) -> String {
+	let mut command_name_parts = words[..starting_index].to_vec();
+	command_name_parts.push("<user.text>");
+	command_name_parts.extend_from_slice(&words[starting_index + prose_size..]);
+	command_name_parts.join(" ")
+}
+
+fn generate_prose_from_words(words: &[&str], starting_index: usize, prose_size: usize) -> String {
+	words[starting_index..starting_index + prose_size].join(" ")
+}
+
+fn compute_text_analyzer_for_prose_and_insert(prose: &str, insert: &InsertAction) -> TextSeparationAnalyzer {
+	let mut analyzer = TextSeparationAnalyzer::new_from_text(&insert.text);
+	analyzer.search_for_prose_in_separated_part(prose);
+	analyzer
+}
+
+fn find_prose_match_for_command_given_insert_at_interval(
+	words: &[&str],
+	insert: &InsertAction,
+	starting_index: usize,
+	prose_size: usize,
+) -> Result<ProseMatch, ()> {
+	let prose = generate_prose_from_words(words, starting_index, prose_size);
+	let analyzer = compute_text_analyzer_for_prose_and_insert(&prose, insert);
+	if analyzer.is_prose_separator_consistent() && analyzer.has_found_prose() && has_valid_case(&analyzer) {
+		let command_name = generate_prose_command_name(words, starting_index, prose_size);
+		Ok(ProseMatch {
+			analyzer,
+			name: command_name,
+		})
+	} else {
+		Err(())
+	}
+}
+
+fn find_prose_matches_for_command_given_insert_at_starting_index(
+	words: &[&str],
+	insert: &InsertAction,
+	starting_index: usize,
+	max_prose_size_to_consider: usize,
+) -> Vec<ProseMatch> {
+	let mut matches = Vec::new();
+	let maximum_size = max_prose_size_to_consider.min(words.len() - starting_index + 1);
+	for prose_size in 1..maximum_size {
+		if let Ok(match_found) = find_prose_match_for_command_given_insert_at_interval(words, insert, starting_index, prose_size) {
+			matches.push(match_found);
+		} else {
+			break;
+		}
+	}
+	matches
+}
+
+fn find_prose_matches_for_command_given_insert(
+	command_chain: &CommandChain,
+	insert: &InsertAction,
+	max_prose_size_to_consider: usize,
+) -> Vec<ProseMatch> {
+	let dictation = command_chain.get_command().get_name();
+	let words: Vec<&str> = dictation.split_whitespace().collect();
+	let mut matches = Vec::new();
+	for starting_index in 0..words.len() {
+		matches.extend(find_prose_matches_for_command_given_insert_at_starting_index(
+			&words, insert, starting_index, max_prose_size_to_consider,
+		));
+	}
+	matches
+}
+
+fn is_acceptable_abstract_representation(representation: &CommandChain) -> bool {
+	representation.get_command().get_actions().len() > 1
+}
+
+fn make_abstract_prose_representations_for_command_given_insert(
+	command_chain: &CommandChain,
+	insert: &InsertAction,
+	max_prose_size_to_consider: usize,
+) -> Vec<AbstractCommandInstantiation> {
+	let mut abstract_representations = Vec::new();
+	let prose_matches = find_prose_matches_for_command_given_insert(command_chain, insert, max_prose_size_to_consider);
+	for match_found in prose_matches {
+		let abstract_representation = make_abstract_representation_for_prose_command(&command_chain, &match_found, insert.index);
+		if is_acceptable_abstract_representation(&abstract_representation.command_chain) {
+			abstract_representations.push(abstract_representation);
+		}
+	}
+	abstract_representations
+}
+
+fn make_abstract_prose_representations_for_command_given_inserts(
+	command_chain: &CommandChain,
+	inserts: &[InsertAction],
+	max_prose_size_to_consider: usize,
+) -> Vec<AbstractCommandInstantiation> {
+	let mut abstract_representations = Vec::new();
+	for insert in inserts {
+		let representations_given_insert = make_abstract_prose_representations_for_command_given_insert(command_chain, insert, max_prose_size_to_consider);
+		abstract_representations.extend(representations_given_insert);
+	}
+	abstract_representations
+}
+
+pub fn make_abstract_prose_representations_for_command(
+	command_chain: &CommandChain,
+	max_prose_size_to_consider: usize,
+) -> Vec<AbstractCommandInstantiation> {
+	let inserts = obtain_inserts_from_command_chain(command_chain);
+	if inserts.is_empty() {
+		Vec::new()
+	} else {
+		make_abstract_prose_representations_for_command_given_inserts(command_chain, &inserts, max_prose_size_to_consider)
+	}
+}
+
+fn basic_command_filter(info: &Information) -> bool {
+	if let Information::Abstract(abstract_info) = info {
+		if abstract_info.get_potential_command_information().get_average_words_dictated() < 2.0 || abstract_info.get_number_of_instantiations() <= 2{
+			return false;
+			
+		}
+	}
+	let concrete = match info {
+		Information::Concrete(concrete_info) => concrete_info,
+		Information::Abstract(abstract_info) => &abstract_info.get_potential_command_information(),
+	};
+	concrete.get_number_of_actions() as f32 / concrete.get_average_words_dictated() < 2.0 ||
+		concrete.get_number_of_actions() as f32 * (concrete.get_number_of_times_used() as f32).sqrt() > concrete.get_average_words_dictated()
+}
+
+fn is_command_after_chain_start_exceeding_time_gap_threshold(
+	record_entry: &Entry,
+	chain_start_index: usize,
+	current_chain_index: usize,
+) -> bool {
+	match record_entry {
+		Entry::RecordingStart => true,
+		Entry::Command(record_entry) => {
+			match record_entry.get_seconds_since_last_action() {
+				Some(seconds) => current_chain_index > chain_start_index && 
+										seconds > FIVE_MINUTES_IN_SECONDS,
+				None => false,
+			}
+		}
+	}
+}
+
