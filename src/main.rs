@@ -1,6 +1,7 @@
 mod input_parsing;
 mod action_records;
 mod recommendation_generation;
+mod action_utilities;
 
 use action_records::{BasicAction, Argument, Command, read_file_record, Entry};
 use recommendation_generation::PotentialCommandInformation;
