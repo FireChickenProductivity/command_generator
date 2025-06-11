@@ -465,7 +465,8 @@
 //         return representation
 
 const FIVE_MINUTES_IN_SECONDS: u32 = 5 * 60;
-use crate::action_records::{BasicAction, CommandChain, Argument, Command};
+use crate::action_records::{Argument, BasicAction, Command, CommandChain, TalonCapture};
+use crate::action_utilities::*;
 use std::collections::HashSet;
 
 fn compute_number_of_words(command_chain: &CommandChain) -> u32 {
@@ -634,6 +635,15 @@ fn create_repeat_action(repeat_count: i32) -> BasicAction {
 	BasicAction::new("repeat", vec![Argument::IntArgument(repeat_count)])
 }
 
+fn compute_command_chain_copy_with_new_name_and_actions(
+	command_chain: &CommandChain,
+	new_name: &str,
+	new_actions: Vec<BasicAction>,
+) -> CommandChain {
+	let new_command = Command::new(new_name, new_actions, command_chain.get_command().get_seconds_since_last_action());
+	CommandChain::new(new_command, command_chain.get_chain_number(), command_chain.get_size())
+}
+
 fn compute_repeat_simplified_command_chain(command_chain: &CommandChain) -> CommandChain {
 	let mut new_actions = Vec::new();
 	let mut last_non_repeat_action: Option<BasicAction> = None;
@@ -661,3 +671,63 @@ fn compute_repeat_simplified_command_chain(command_chain: &CommandChain) -> Comm
 	CommandChain::new(new_command, command_chain.get_chain_number(), command_chain.get_size())
 }
 
+fn compute_insert_simplified_command_chain(command_chain: &CommandChain) -> CommandChain {
+	let mut new_actions = Vec::new();
+	let mut current_insert_text = String::new();
+
+	for action in command_chain.get_command().get_actions() {
+		if is_insert(action) {
+			current_insert_text += get_insert_text(action);
+		} else {
+			if !current_insert_text.is_empty() {
+				new_actions.push(create_insert_action(current_insert_text.as_str()));
+				current_insert_text.clear();
+			}
+			new_actions.push(action.clone());
+		}
+	}
+
+	if !current_insert_text.is_empty() {
+		new_actions.push(create_insert_action(current_insert_text.as_str()));
+	}
+
+	let new_command = Command::new(command_chain.get_command().get_name(), new_actions, command_chain.get_command().get_seconds_since_last_action());
+	CommandChain::new(new_command, command_chain.get_chain_number(), command_chain.get_size())
+}
+
+fn should_make_abstract_repeat_representation(command_chain: &CommandChain) -> bool {
+	let actions = command_chain.get_command().get_actions();
+	if actions.len() <= 2 {
+		return false;
+	}
+	actions.iter().any(|action| action.get_name() == "repeat")
+}
+
+fn make_abstract_repeat_representation_for(command_chain: &CommandChain) -> AbstractCommandInstantiation {
+	let actions = command_chain.get_command().get_actions();
+	let mut instances = 0;
+	let mut new_actions = Vec::new();
+	let mut new_name = command_chain.get_command().get_name().to_string();
+
+	for action in actions {
+		if action.get_name() == "repeat" {
+			instances += 1;
+			let mut capture = TalonCapture::new("number_small", instances);
+			capture.set_postfix(" - 1");
+			new_name.push_str(&format!(" {}", capture.compute_command_component()));
+			let argument = Argument::CaptureArgument(capture);
+			let repeat_action = BasicAction::new("repeat", vec![argument]);
+			new_actions.push(repeat_action);
+		} else {
+			new_actions.push(action.clone());
+		}
+	}
+
+	let new_command = compute_command_chain_copy_with_new_name_and_actions(command_chain, &new_name, new_actions);
+	let words_saved = compute_number_of_words(command_chain) - 2; 
+	AbstractCommandInstantiation {
+		command_chain: new_command,
+		concrete_command: command_chain.clone(),
+		words_saved: words_saved as u32,
+	}
+}

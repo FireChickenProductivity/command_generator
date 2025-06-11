@@ -9,6 +9,7 @@ use std::io::{self, BufRead};
 pub struct TalonCapture {
 	name: String,
 	instance: i32,
+	postfix: String,
 }
 
 impl TalonCapture {
@@ -16,11 +17,16 @@ impl TalonCapture {
 		TalonCapture {
 			name: String::from(name),
 			instance,
+			postfix: String::new(),
 		}
 	}
 
+	pub fn set_postfix(&mut self, postfix: &str) {
+		self.postfix = String::from(postfix);
+	}
+
 	pub fn compute_string_representation(&self) -> String {
-		format!("{}_{}", self.name, self.instance)
+		format!("{}_{}{}", self.name, self.instance, self.postfix)
 	}
 
 	pub fn compute_command_component(&self) -> String {
@@ -35,6 +41,7 @@ impl TalonCapture {
 		TalonCapture {
 			name: self.name.clone(),
 			instance: self.instance,
+			postfix: self.postfix.clone(),
 		}
 	}
 }
@@ -111,7 +118,7 @@ impl BasicAction {
 			Argument::IntArgument(arg) => arg.to_string(),
 			Argument::BoolArgument(arg) => arg.to_string(),
 			Argument::FloatArgument(arg) => arg.to_string(),
-			Argument::CaptureArgument(arg) => arg.compute_command_component(),
+			Argument::CaptureArgument(arg) => arg.compute_string_representation(),
 		}
 	}
 
@@ -194,6 +201,7 @@ impl Command {
 	}
 }
 
+#[derive(Clone)]
 pub struct CommandChain {
 	command: Command,
 	chain_number: u32,
