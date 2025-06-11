@@ -549,4 +549,49 @@ mod tests {
 	fn test_handles_separator_with_two_words_at_end() {
 		assert_separator_matches_expected("at_ending_there_are_two_words", "two words", "_");
 	}
+
+	fn assert_indices_match(text: &str, prose: &str, prose_index: usize, prose_beginning_index: usize, prose_ending_index: usize) {
+		let mut analyzer = TextSeparationAnalyzer::new_from_text(text);
+		analyzer.search_for_prose_in_separated_part(prose);
+		assert_eq!(analyzer.get_prose_index().unwrap(), prose_index);
+		assert_eq!(analyzer.get_prose_beginning_index().unwrap(), prose_beginning_index);
+		assert_eq!(analyzer.get_prose_ending_index().unwrap(), prose_ending_index);
+	}
+
+	#[test]
+	fn test_can_find_one_word_prose_at_beginning() {
+		assert_indices_match("testing this here", "test", 0, 0, 4);
+	}
+
+	#[test]
+	fn test_can_find_multiple_words_at_beginning() {
+		assert_indices_match("this_is_a_test_", "this is a test", 0, 0, 4);
+	}
+
+	#[test]
+	fn test_can_find_one_word_in_middle() {
+		assert_indices_match("this_is_a_realtest_right_here", "test", 3, 4, 8);
+	}
+
+	#[test]
+	fn test_can_find_multiple_words_in_middle() {
+		assert_indices_match("yes_forrealthis_is_a_testrighthere_", "this is a testr", 1, 7, 5);
+	}
+
+	#[test]
+	fn test_can_find_one_word_at_ending() {
+		assert_indices_match("this_is_actuallytestingstuff", "testing", 2, 8, 15);
+	}
+
+	#[test]
+	fn test_can_find_multiple_words_at_ending() {
+		assert_indices_match("once_again_this_is_a_test", "this is a test", 2, 0, 4);
+	}
+
+	#[test]
+	fn can_find_multiple_words_at_middle_of_ending() {
+		assert_indices_match("once_againthis_is_a_testing", "this is a test", 1, 5, 4);
+	}
+
+	
 }
