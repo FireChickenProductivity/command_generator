@@ -212,12 +212,12 @@ impl TextSeparationAnalyzer {
 		self.is_separator_consistent(self.prose_index.unwrap(), self.final_prose_index_into_separated_parts.unwrap())
 	}
 
-	pub fn get_first_prose_separator(&self) -> Option<&String> {
+	pub fn get_first_prose_separator(&self) -> String {
 		let separators = self.text_separation.get_separators();
 		if self.prose_index.unwrap() < separators.len() && self.prose_index.unwrap() != self.final_prose_index_into_separated_parts.unwrap() {
-			Some(&separators[self.prose_index.unwrap()])
+			separators[self.prose_index.unwrap()].clone()
 		} else {
-			None
+			String::new()
 		}
 	}
 
@@ -512,7 +512,7 @@ mod tests {
 		let mut analyzer = TextSeparationAnalyzer::new_from_text(text);
 		analyzer.search_for_prose_in_separated_part(prose);
 		let separator = analyzer.get_first_prose_separator();
-		assert_eq!(separator, Some(&expected_separator.to_string()));
+		assert_eq!(separator, expected_separator);
 	}
 
 	#[test]
