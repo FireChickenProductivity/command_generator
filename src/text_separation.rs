@@ -208,3 +208,158 @@ pub struct TextSeparation {
 	current_separator: String,
 	text_prefix: String,
 }
+
+impl TextSeparation {
+	pub fn new(string: &str, character_filter: fn(char) -> bool) -> Self {
+		let mut instance = TextSeparation {
+			separated_parts: Vec::new(),
+			separators: Vec::new(),
+			current_separated_part: String::new(),
+			current_separator: String::new(),
+			text_prefix: String::new(),
+		};
+		string.chars().for_each(| character | {
+			instance.process_character(character, character_filter);
+		});
+
+		if instance.current_separated_part.is_empty() {
+			instance.handle_separator();
+		}
+		if instance.current_separator.is_empty() {
+			instance.add_separated_part();
+		}
+		instance
+	}
+
+	fn process_character(&mut self, character: char, character_filter: fn(char) -> bool) {
+		if character_filter(character) {
+			if self.current_separated_part.is_empty() {
+				self.handle_separator();
+			}
+			self.current_separated_part.push(character);
+		} else {
+			if self.current_separator.is_empty() && !self.current_separated_part.is_empty() {
+				self.add_separated_part();
+			}
+			self.current_separator.push(character);
+		}
+	}
+
+	fn handle_separator(&mut self) {
+		if !self.separated_parts.is_empty() {
+			self.separators.push(self.current_separator.clone());
+		} else {
+			self.text_prefix = self.current_separator.clone();
+		}
+		self.current_separator.clear();
+	}
+
+	fn add_separated_part(&mut self) {
+		self.separated_parts.push(self.current_separated_part.clone());
+		self.current_separated_part.clear();
+	}
+
+	pub fn get_separated_parts(&self) -> &Vec<String> {
+		&self.separated_parts
+	}
+
+	pub fn get_separators(&self) -> &Vec<String> {
+		&self.separators
+	}
+
+	pub fn get_prefix(&self) -> &String {
+		&self.text_prefix
+	}
+}
+
+struct TextSeparationAnalyzer {
+	text_separation: TextSeparation,
+	prose_index: Option<usize>,
+	final_prose_index_into_separated_parts: Option<usize>,
+	prose_beginning_index: Option<usize>,
+	prose_ending_index: Option<usize>,
+	number_of_prose_words: Option<usize>,
+	found_prose: bool,
+	prose: Option<String>,
+}
+
+impl TextSeparationAnalyzer {
+	pub fn new(text: &str, character_filter: fn(char) -> bool) -> Self {
+		TextSeparationAnalyzer {
+			text_separation: TextSeparation::new(text, character_filter),
+			prose_index: None,
+			final_prose_index_into_separated_parts: None,
+			prose_beginning_index: None,
+			prose_ending_index: None,
+			number_of_prose_words: None,
+			found_prose: false,
+			prose: None,
+		}
+	}
+	
+	/// Assumes that initial_separated_part is lowercase
+	fn search_for_prose_beginning_at_separated_part_index(&mut self, words: &[String], initial_separated_part: &str) {
+		let first_word = &words[0];
+		if initial_separated_part.ends_with(first_word) {
+			self.prose_beginning_index = Some(initial_separated_part.rfind(first_word).unwrap());
+		}
+	}
+	
+	fn search_for_prose_at_separated_part_index_beginning(&mut self, prose_without_spaces: &str, lowercase_part: &str, index: usize) {
+		if let Some(prose_beginning_index) = lowercase_part.find(prose_without_spaces) {
+			self.prose_beginning_index = Some(prose_beginning_index);
+			self.prose_ending_index = Some(self.prose_beginning_index.unwrap() + prose_without_spaces.len());
+			self.found_prose = true;
+			self.final_prose_index_into_separated_parts = Some(index);
+		}
+	}
+
+	fn is_prose_middle_different_from_separated_parts_at_index(&self, words: &[String], separated_parts: &[String], index: usize) -> bool {
+		for prose_index in 1..words.len() - 1 {
+			let word = &words[prose_index];
+			let separated_part = &separated_parts[prose_index + index].to_lowercase();
+			if separated_part != word {
+				return true;
+			}
+		}
+		false
+	}
+	fn perform_final_prose_search_at_index(&mut self, words: &[String], index: usize) {
+		if words.len() == 1 {
+			self.found_prose = true;
+			self.final_prose_index_into_separated_parts = Some(self.prose_index.unwrap());
+		} else {
+			self.final_prose_index_into_separated_parts = Some(index + words.len() - 1);
+			let separated_parts = self.text_separation.get_separated_parts();
+			let final_separated_part = separated_parts[self.final_prose_index_into_separated_parts.unwrap()].to_lowercase();
+			let last_word = &words[words.len() - 1];
+			if final_separated_part.starts_with(last_word) {
+				self.prose_ending_index = Some(last_word.len());
+				self.found_prose = true;
+			}
+		}
+	}
+	fn reset_indices(&mut self) {
+		self.prose_beginning_index = None;
+		self.prose_index = None;
+		self.prose_ending_index = None;
+		self.final_prose_index_into_separated_parts = None;
+	}
+
+	fn search_for_prose_at_separated_part_index(&mut self, prose_without_spaces: &str, words: &[String], index: usize)-> () { 
+		self.reset_indices();
+		
+		let separated_part = self.text_separation.get_separated_parts()[index].to_lowercase();
+
+		self.search_for_prose_at_separated_part_index_beginning(prose_without_spaces, &separated_part, index);
+		if self.found_prose { return (); }
+		if words.len() + index > self.text_separation.get_separated_parts().len() { return (); }
+
+		self.search_for_prose_beginning_at_separated_part_index(words, &separated_part);
+		if self.prose_beginning_index.is_none() { return (); }
+
+		if self.is_prose_middle_different_from_separated_parts_at_index(words, self.text_separation.get_separated_parts(), index) { return (); }
+
+		self.perform_final_prose_search_at_index(words, index);
+	}
+}
