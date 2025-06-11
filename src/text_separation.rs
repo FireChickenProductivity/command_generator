@@ -280,7 +280,7 @@ struct TextSeparationAnalyzer {
 	prose_ending_index: Option<usize>,
 	number_of_prose_words: Option<usize>,
 	found_prose: bool,
-	prose: Option<String>,
+	prose: String,
 }
 
 impl TextSeparationAnalyzer {
@@ -293,7 +293,7 @@ impl TextSeparationAnalyzer {
 			prose_ending_index: None,
 			number_of_prose_words: None,
 			found_prose: false,
-			prose: None,
+			prose: String::new(),
 		}
 	}
 	
@@ -362,4 +362,124 @@ impl TextSeparationAnalyzer {
 
 		self.perform_final_prose_search_at_index(words, index);
 	}
+
+	pub fn search_for_prose_in_separated_part(&mut self, prose: &str) {
+		let lowercase_prose = prose.to_lowercase();
+		let prose_without_spaces = lowercase_prose.replace(' ', "").to_string();
+		let words: Vec<String> = lowercase_prose.split(' ').map(|s| s.to_string()).collect();
+		self.number_of_prose_words = Some(words.len());
+		self.prose = prose.to_string();
+		for index in 0..self.text_separation.get_separated_parts().len() {
+			self.search_for_prose_at_separated_part_index(&prose_without_spaces, &words, index);
+			self.prose_index = Some(index);
+			if self.found_prose { return (); }
+		}
+		self.found_prose = false;
+	}
+
+	pub fn is_separator_consistent(&self, starting_index: usize, ending_index: usize) -> bool {
+		let separators = &self.text_separation.get_separators()[starting_index..ending_index];
+		if separators.len() <= 1 { return true; }
+		let initial_separator = &separators[0];
+		for separator in &separators[1..] {
+			if separator != initial_separator { return false; }
+		}
+		true
+	}
+
+	pub fn get_prose_index(&self) -> Option<usize> {
+		self.prose_index
+	}
+
+	pub fn get_prose_beginning_index(&self) -> Option<usize> {
+		self.prose_beginning_index
+	}
+
+	pub fn get_prose_ending_index(&self) -> Option<usize> {
+		self.prose_ending_index
+	}
+
+	pub fn is_prose_separator_consistent(&self) -> bool {
+		self.is_separator_consistent(self.prose_index.unwrap(), self.final_prose_index_into_separated_parts.unwrap())
+	}
+
+	pub fn get_first_prose_separator(&self) -> Option<&String> {
+		let separators = self.text_separation.get_separators();
+		if self.prose_index.unwrap() < separators.len() && self.prose_index.unwrap() != self.final_prose_index_into_separated_parts.unwrap() {
+			Some(&separators[self.prose_index.unwrap()])
+		} else {
+			None
+		}
+	}
+
+	pub fn has_found_prose(&self) -> bool {
+		self.found_prose
+	}
+
+	pub fn compute_text_before_prose(&self) -> String {
+		let mut text = self.text_separation.get_prefix().clone();
+		let separated_parts = self.text_separation.get_separated_parts();
+		let separators = self.text_separation.get_separators();
+		let prose_index = self.prose_index.unwrap();
+		for index in 0..prose_index {
+			text.push_str(&separated_parts[index]);
+			text.push_str(&separators[index]);
+		}
+		text.push_str(&separated_parts[prose_index][0..self.prose_beginning_index.unwrap()]);
+		text
+	}
+
+	pub fn compute_text_after_prose(&self) -> String {
+		let separated_parts = self.text_separation.get_separated_parts();
+		let separators = self.text_separation.get_separators();
+		let mut text = String::new();
+		let first_word = &separated_parts[self.final_prose_index_into_separated_parts.unwrap()];
+		if self.prose_ending_index.unwrap() < first_word.len() {
+			text.push_str(&first_word[self.prose_ending_index.unwrap()..]);
+		}
+		if self.final_prose_index_into_separated_parts.unwrap() < separators.len() {
+			text.push_str(&separators[self.final_prose_index_into_separated_parts.unwrap()]);
+		}
+		for index in (self.final_prose_index_into_separated_parts.unwrap() + 1)..separated_parts.len() {
+			text.push_str(&separated_parts[index]);
+			if index < separators.len() {
+				text.push_str(&separators[index]);
+			}
+		}
+		text
+	}
+
+	fn compute_prose_portion_of_nonseparated_text(&self) -> Vec<String> {
+		let words: Vec<&str> = self.prose.split(' ').collect();
+		let prose_portion_of_text_as_string = &self.text_separation.get_separated_parts()[self.prose_index.unwrap()][self.prose_beginning_index.unwrap()..self.prose_ending_index.unwrap()];
+		let mut word_starting_index = 0;
+		let mut words_from_text = Vec::new();
+		for word in words {
+			let word_ending_index = word_starting_index + word.len();
+			let word_from_text = &prose_portion_of_text_as_string[word_starting_index..word_ending_index];
+			words_from_text.push(word_from_text.to_string());
+			word_starting_index = word_ending_index;
+		}
+		words_from_text
+	}
+
+	fn compute_prose_portion_of_separated_text(&self, prose_final_index: usize) -> Vec<String> {
+		let mut prose_words = Vec::new();
+		let separated_parts = self.text_separation.get_separated_parts();
+		prose_words.push(separated_parts[self.prose_index.unwrap()][self.prose_beginning_index.unwrap()..].to_string());
+		for index in (self.prose_index.unwrap() + 1)..prose_final_index {
+			prose_words.push(separated_parts[index].clone());
+		}
+		prose_words.push(separated_parts[prose_final_index][..self.prose_ending_index.unwrap()].to_string());
+		prose_words
+	}
+
+	pub fn compute_prose_portion_of_text(&self) -> Vec<String> {
+		if self.prose_index.unwrap() == self.final_prose_index_into_separated_parts.unwrap() {
+			self.compute_prose_portion_of_nonseparated_text()
+		} else {
+			self.compute_prose_portion_of_separated_text(self.final_prose_index_into_separated_parts.unwrap())
+		}
+	}
+
 }
