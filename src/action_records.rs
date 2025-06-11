@@ -644,7 +644,7 @@ mod tests {
 				Argument::CaptureArgument(TalonCapture::new("capture_name", 1)),
 			]
 		);
-		let talon_script = String::from("text_action(\"text\", 42, true, 3.14, <capture_name_1>)");
+		let talon_script = String::from("text_action(\"text\", 42, true, 3.14, capture_name_1)");
 		assert_eq!(action.compute_talon_script(), talon_script);
 	}
 
