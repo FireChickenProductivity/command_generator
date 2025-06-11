@@ -293,6 +293,50 @@ impl TextSeparationAnalyzer {
 
 }
 
+fn compute_case(text: &str) -> Option<String> {
+	if text.chars().all(|c| c.is_lowercase()) {
+		return Some("lower".to_string());
+	} else if text.chars().all(|c| c.is_uppercase()) {
+		return Some("upper".to_string());
+	} else if let Some(first_char) = text.chars().next() {
+		if first_char.is_uppercase() && text[1..].chars().all(|c| c.is_lowercase()) {
+			return Some("capitalized".to_string());
+		}
+	} 
+	None
+}
+
+/// This is an inefficient approach that should be changed later
+fn has_valid_case(analyzer: &TextSeparationAnalyzer) -> bool {
+	analyzer.compute_prose_portion_of_text().iter().all(|word| compute_case(word).is_some())
+}
+
+fn compute_simplified_case_strings_list(case_strings: Vec<String>) -> Vec<String> {
+	let mut simplified_case_strings = Vec::new();
+	let mut new_case_found = false;
+	let final_case = case_strings.last().unwrap().clone();
+	simplified_case_strings.push(final_case);
+	for case in case_strings.iter().rev().skip(1) {
+		let final_case_reference = &simplified_case_strings[0];
+		if case != final_case_reference || new_case_found {
+			simplified_case_strings.push(case.clone());
+			new_case_found = true;
+		}
+	}
+	simplified_case_strings.reverse();
+	simplified_case_strings
+}
+
+fn compute_case_string_for_prose(analyzer: TextSeparationAnalyzer) -> String {
+	let prose = analyzer.compute_prose_portion_of_text();
+	let case_strings: Vec<String> = prose.iter()
+		.filter_map(|prose_word| compute_case(prose_word))
+		.collect();
+	let simplified_case_strings = compute_simplified_case_strings_list(case_strings);
+	let case_string = simplified_case_strings.join(" ");
+	case_string
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -378,6 +422,90 @@ mod tests {
 			"is a",
 			"!test today",
 		);
+	}
+
+	fn assert_text_with_prose_gives_consistency_result(text: &str, prose: &str, expected_consistency: bool) {
+		let mut analyzer = TextSeparationAnalyzer::new_from_text(text);
+		analyzer.search_for_prose_in_separated_part(prose);
+		assert_eq!(analyzer.is_prose_separator_consistent(), expected_consistency);
+	}
+
+	#[test]
+	fn test_consistent_with_single_word_prose() {
+		assert_text_with_prose_gives_consistency_result("this_is_a_test", "is", true);
+	}
+
+	#[test]
+	fn test_consistent_with_snake_case_prose() {
+		assert_text_with_prose_gives_consistency_result("chicken!!this_is_a_testchicken", "this is a test", true);
+	}
+
+	#[test]
+	fn test_consistent_with_spaces() {
+		assert_text_with_prose_gives_consistency_result("for real this is a test", "this is a test", true);
+	}
+
+	#[test]
+	fn test_consistent_with_two_words() {
+		assert_text_with_prose_gives_consistency_result("this_is!_@_______a_test", "is a", true);
+	}
+
+	#[test]
+	fn test_consistency_handles_final_word() {
+		assert_text_with_prose_gives_consistency_result("this_is_a_test!", "is a test", true);
+	}
+
+	#[test]
+	fn test_inconsistent_with_two_different_separators() {
+		assert_text_with_prose_gives_consistency_result("this_is a test", "this is a", false);
+	}
+
+	fn assert_prose_case_matches_expected(text: &str, prose: &str, expected_case: &str) {
+		let mut analyzer = TextSeparationAnalyzer::new_from_text(text);
+		analyzer.search_for_prose_in_separated_part(prose);
+		let case_string = compute_case_string_for_prose(analyzer);
+		assert_eq!(case_string, expected_case);
+	}
+
+	#[test]
+	fn test_case_handles_single_lower_case_word() {
+		assert_prose_case_matches_expected("word", "word", "lower");
+	}
+
+	#[test]
+	fn test_case_handles_single_upper_case_word() {
+		assert_prose_case_matches_expected("WORD", "word", "upper");
+	}
+
+	#[test]
+	fn test_case_handles_single_capitalized_word() {
+		assert_prose_case_matches_expected("Word", "word", "capitalized");
+	}
+
+	#[test]
+	fn test_case_handles_single_uppercase_character() {
+		assert_prose_case_matches_expected("A", "a", "upper");
+		
+	}
+
+	#[test]
+	fn test_case_handles_camel_case() {
+		assert_prose_case_matches_expected("thisIsATest", "this is a test", "lower capitalized upper capitalized");
+	}
+
+	#[test]
+	fn test_case_handles_snake_case_correctly() {
+		assert_prose_case_matches_expected("this_is_a_test", "this is a test", "lower");
+	}
+
+	#[test]
+	fn test_case_handles_substring_prose() {
+		assert_prose_case_matches_expected("yesthisIsaTESThere", "this is a test", "lower capitalized lower upper");
+	}
+
+	#[test]
+	fn test_handles_separated_sub_string() {
+		assert_prose_case_matches_expected("stuff!THIS_IS_A_TEST!stuff", "this is a test", "upper");
 	}
 
 	
