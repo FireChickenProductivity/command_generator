@@ -508,5 +508,45 @@ mod tests {
 		assert_prose_case_matches_expected("stuff!THIS_IS_A_TEST!stuff", "this is a test", "upper");
 	}
 
-	
+	fn assert_separator_matches_expected(text: &str, prose: &str, expected_separator: &str) {
+		let mut analyzer = TextSeparationAnalyzer::new_from_text(text);
+		analyzer.search_for_prose_in_separated_part(prose);
+		let separator = analyzer.get_first_prose_separator();
+		assert_eq!(separator, Some(&expected_separator.to_string()));
+	}
+
+	#[test]
+	fn test_single_word_with_no_separator() {
+		assert_separator_matches_expected("this", "this", "");
+	}
+
+	#[test]
+	fn test_single_word_in_text_with_no_internal_separator() {
+		assert_separator_matches_expected("stuff this test", "this", "");
+	}
+
+	#[test]
+	fn test_handles_two_words_with_separator() {
+		assert_separator_matches_expected("two  words", "two words", "  ");
+	}
+
+	#[test]
+	fn test_handles_two_words_in_text_with_separator() {
+		assert_separator_matches_expected("This contains two_words in the middle", "two words", "_");
+	}
+
+	#[test]
+	fn test_correct_separator_with_three_words_in_text() {
+		assert_separator_matches_expected("this_is_a_bigger_test_case", "a bigger test", "_");
+	}
+
+	#[test]
+	fn test_handles_separator_with_two_words_at_beginning() {
+		assert_separator_matches_expected("two_words_at_the_beginning", "two words", "_");
+	}
+
+	#[test]
+	fn test_handles_separator_with_two_words_at_end() {
+		assert_separator_matches_expected("at_ending_there_are_two_words", "two words", "_");
+	}
 }
