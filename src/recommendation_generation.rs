@@ -15,6 +15,8 @@ use crate::text_separation::{
 	has_valid_case,
 };
 use std::collections::{HashMap, HashSet};
+use std::sync::{Mutex, Arc};
+use std::thread;
 
 fn compute_number_of_words(command_chain: &CommandChain) -> u32 {
 	command_chain.get_command().get_name().split_whitespace().count() as u32
@@ -571,22 +573,14 @@ impl CommandInformationSet {
 		}
 	}
 
-	pub fn insert_concrete_command(&mut self, command: PotentialCommandInformation, representation: String) {
-		self.concrete_commands.insert(representation, command);
-	}
-
-	pub fn insert_abstract_command(&mut self, command: PotentialAbstractCommandInformation, representation: String) {
-		self.abstract_commands.insert(representation, command);
-	}
-
-	pub fn process_abstract_command_usage(&mut self, instantiation: AbstractCommandInstantiation, representation: Option<String>) {
-		let representation = representation.unwrap_or_else(|| compute_string_representation_of_chain_actions(&instantiation.command_chain));
+	pub fn process_abstract_command_usage(&mut self, instantiation: AbstractCommandInstantiation) {
+		let representation = compute_string_representation_of_chain_actions(&instantiation.command_chain);
 		if let Some(info) = self.abstract_commands.get_mut(&representation) {
 			info.process_usage(instantiation);
 		} else {
-			self.insert_abstract_command(
-				PotentialAbstractCommandInformation::new(instantiation),
+			self.abstract_commands.insert(
 				representation,
+				PotentialAbstractCommandInformation::new(instantiation),
 			);
 		}
 	}
@@ -594,26 +588,23 @@ impl CommandInformationSet {
 	pub fn handle_needed_abstract_commands(&mut self, command_chain: &CommandChain) {
 		let abstract_commands = create_abstract_commands(command_chain);
 		for abstract_command in abstract_commands {
-			self.process_abstract_command_usage(abstract_command, None);
+			self.process_abstract_command_usage(abstract_command);
 		}
 	}
 
-	pub fn process_concrete_command_usage(&mut self, command_chain: &CommandChain, representation: Option<String>) {
-		let representation = representation.unwrap_or_else(|| compute_string_representation_of_chain_actions(command_chain));
+	pub fn process_concrete_command_usage(&mut self, command_chain: &CommandChain) {
+		let representation = compute_string_representation_of_chain_actions(command_chain);
 		if let Some(info) = self.concrete_commands.get_mut(&representation) {
 			info.process_usage(command_chain);
 		} else {
 			let mut concrete_info = PotentialCommandInformation::new(command_chain.get_command().get_actions().clone());
 			concrete_info.process_relevant_usage(command_chain);
-			self.insert_concrete_command(
-				concrete_info,
-				representation,
-			);
+			self.concrete_commands.insert(representation, concrete_info);
 		}
 	}
 
 	pub fn process_command_usage(&mut self, command_chain: &CommandChain) {
-		self.process_concrete_command_usage(command_chain, None);
+		self.process_concrete_command_usage(command_chain);
 		self.handle_needed_abstract_commands(command_chain);
 	}
 
