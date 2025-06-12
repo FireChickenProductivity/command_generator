@@ -40,7 +40,10 @@ pub fn output_recommendations(
 		let mut number_of_words_saved = 0;
 
 		let concrete_info = match recommendation {
-			Information::Concrete(info) => info,
+			Information::Concrete(info) => {
+				number_of_words_saved = info.get_number_of_words_saved();
+				info
+			},
 			Information::Abstract(info) => {
 				number_of_words_saved = info.get_number_of_words_saved();
 				info.get_potential_command_information()

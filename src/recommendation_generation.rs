@@ -486,15 +486,19 @@ pub fn make_abstract_prose_representations_for_command(
 }
 
 fn basic_command_filter(info: &Information) -> bool {
+	let mut is_abstract = false;
 	if let Information::Abstract(abstract_info) = info {
-		if abstract_info.get_potential_command_information().get_average_words_dictated() < 2.0 || abstract_info.get_number_of_instantiations() <= 2{
+		if abstract_info.get_potential_command_information().get_average_words_dictated() < 2.0 || abstract_info.get_number_of_instantiations() <= 2 || abstract_info.get_number_of_words_saved() < 1 {
 			return false;
 		}
+		is_abstract = true;	
 	}
 	let concrete = match info {
 		Information::Concrete(concrete_info) => concrete_info,
 		Information::Abstract(abstract_info) => &abstract_info.get_potential_command_information(),
 	};
+	(is_abstract || concrete.get_number_of_words_saved() > 0) &&
+	concrete.get_number_of_times_used() > 0 &&
 	concrete.get_number_of_times_used() > 1 && (
 	concrete.get_number_of_actions() as f32 / concrete.get_average_words_dictated() < 2.0 ||
 		concrete.get_number_of_actions() as f32 * (concrete.get_number_of_times_used() as f32).sqrt() > concrete.get_average_words_dictated())
