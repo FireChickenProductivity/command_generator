@@ -6,7 +6,7 @@ mod text_separation;
 mod data_output;
 
 use action_records::{BasicAction, Argument, Command, read_file_record, Entry};
-use recommendation_generation::{compute_recommendations_from_record, PotentialCommandInformation};
+use recommendation_generation::{compute_recommendations_from_record, PotentialCommandInformation, create_sorted_info};
 use std::time::Instant;
 use data_output::{create_data_directory, output_recommendations};
 
@@ -45,9 +45,11 @@ fn main() {
 			println!("Generating recommendations");
 			let recommendations = compute_recommendations_from_record(&record, parameters.max_chain_size);
 			let elapsed_time = start_time.elapsed();
+			let output = create_sorted_info(&recommendations);
 			println!("Time taken to compute recommendations: {:.3?}", elapsed_time);
-			println!("Created {} recommendations.", recommendations.len());
-			output_recommendations(&recommendations, "file.txt")
+			println!("Created {} recommendations.", recommendations.concrete.len() + recommendations.abs.len());
+			return;
+			output_recommendations(&output, "file.txt")
 				.unwrap_or_else(|e| println!("Error writing recommendations to file: {}", e));
 			println!("Recommendations written to file.");
 		}

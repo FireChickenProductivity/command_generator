@@ -485,23 +485,17 @@ pub fn make_abstract_prose_representations_for_command(
 	}
 }
 
-fn basic_command_filter(info: &Information) -> bool {
-	let mut is_abstract = false;
-	if let Information::Abstract(abstract_info) = info {
-		if abstract_info.get_potential_command_information().get_average_words_dictated() < 2.0 || abstract_info.get_number_of_instantiations() <= 2 || abstract_info.get_number_of_words_saved() < 1 {
-			return false;
-		}
-		is_abstract = true;	
+fn basic_concrete_command_filter(info: &PotentialCommandInformation) -> bool {
+	info.get_number_of_words_saved() > 0 && info.get_number_of_times_used() > 1 &&
+	(info.get_number_of_actions() as f32 / info.get_average_words_dictated() < 2.0 ||
+		info.get_number_of_actions() as f32 * (info.get_number_of_times_used() as f32).sqrt() > info.get_average_words_dictated())
+}
+
+fn basic_abstract_command_filter(info: &PotentialAbstractCommandInformation) -> bool {
+	if info.get_potential_command_information().get_average_words_dictated() < 2.0 || info.get_number_of_instantiations() <= 2 || info.get_number_of_words_saved() < 1 {
+		return false;
 	}
-	let concrete = match info {
-		Information::Concrete(concrete_info) => concrete_info,
-		Information::Abstract(abstract_info) => &abstract_info.get_potential_command_information(),
-	};
-	(is_abstract || concrete.get_number_of_words_saved() > 0) &&
-	concrete.get_number_of_times_used() > 0 &&
-	concrete.get_number_of_times_used() > 1 && (
-	concrete.get_number_of_actions() as f32 / concrete.get_average_words_dictated() < 2.0 ||
-		concrete.get_number_of_actions() as f32 * (concrete.get_number_of_times_used() as f32).sqrt() > concrete.get_average_words_dictated())
+	basic_concrete_command_filter(info.get_potential_command_information())
 }
 
 fn is_command_after_chain_start_exceeding_time_gap_threshold(
@@ -565,30 +559,35 @@ pub fn create_abstract_commands(command_chain: &CommandChain) -> Vec<AbstractCom
 }
 
 pub struct CommandInformationSet {
-	commands: HashMap<String, Information>,
+	concrete_commands: HashMap<String, PotentialCommandInformation>,
+	abstract_commands: HashMap<String, PotentialAbstractCommandInformation>,
 }
 
 impl CommandInformationSet {
 	pub fn new() -> Self {
 		Self {
-			commands: HashMap::new(),
+			concrete_commands: HashMap::new(),
+			abstract_commands: HashMap::new(),
 		}
 	}
 
-	pub fn insert_command(&mut self, command: Information, representation: String) {
-		self.commands.insert(representation, command);
+	pub fn insert_concrete_command(&mut self, command: PotentialCommandInformation, representation: String) {
+		self.concrete_commands.insert(representation, command);
+	}
+
+	pub fn insert_abstract_command(&mut self, command: PotentialAbstractCommandInformation, representation: String) {
+		self.abstract_commands.insert(representation, command);
 	}
 
 	pub fn process_abstract_command_usage(&mut self, instantiation: AbstractCommandInstantiation, representation: Option<String>) {
 		let representation = representation.unwrap_or_else(|| compute_string_representation_of_chain_actions(&instantiation.command_chain));
-		if let Some(info) = self.commands.get_mut(&representation) {
-			if let Information::Abstract(abstract_info) = info {
-				abstract_info.process_usage(instantiation);
-			} else {
-				panic!("Expected an abstract command information, but found concrete.");
-			}
+		if let Some(info) = self.abstract_commands.get_mut(&representation) {
+			info.process_usage(instantiation);
 		} else {
-			self.insert_command(Information::Abstract(PotentialAbstractCommandInformation::new(instantiation)), representation);
+			self.insert_abstract_command(
+				PotentialAbstractCommandInformation::new(instantiation),
+				representation,
+			);
 		}
 	}
 
@@ -601,17 +600,13 @@ impl CommandInformationSet {
 
 	pub fn process_concrete_command_usage(&mut self, command_chain: &CommandChain, representation: Option<String>) {
 		let representation = representation.unwrap_or_else(|| compute_string_representation_of_chain_actions(command_chain));
-		if let Some(info) = self.commands.get_mut(&representation) {
-			if let Information::Concrete(concrete_info) = info {
-				concrete_info.process_usage(command_chain);
-			} else {
-				panic!("Expected a concrete command information, but found abstract.");
-			}
+		if let Some(info) = self.concrete_commands.get_mut(&representation) {
+			info.process_usage(command_chain);
 		} else {
 			let mut concrete_info = PotentialCommandInformation::new(command_chain.get_command().get_actions().clone());
 			concrete_info.process_relevant_usage(command_chain);
-			self.insert_command(
-				Information::Concrete(concrete_info),
+			self.insert_concrete_command(
+				concrete_info,
 				representation,
 			);
 		}
@@ -643,18 +638,30 @@ impl CommandInformationSet {
 		}
 	}
 
-	pub fn get_commands_meeting_condition(
+	pub fn get_concrete_commands_meeting_condition(
 		&self,
-		condition: fn(&Information) -> bool,
-	) -> Vec<Information> {
-		self.commands.values()
+		condition: fn(&PotentialCommandInformation) -> bool,
+	) -> Vec<PotentialCommandInformation> {
+		self.concrete_commands
+			.values()
 			.filter(|info| condition(info))
-			.cloned()
+			.map(|info| info.clone())
+			.collect()
+	}
+
+	pub fn get_abstract_commands_meeting_condition(
+		&self,
+		condition: fn(&PotentialAbstractCommandInformation) -> bool,
+	) -> Vec<PotentialAbstractCommandInformation> {
+		self.abstract_commands
+			.values()
+			.filter(|info| condition(info))
+			.map(|info| info.clone())
 			.collect()
 	}
 
 	pub fn contains_command_with_representation(&self, representation: &str) -> bool {
-		self.commands.contains_key(representation)
+		self.concrete_commands.contains_key(representation) || self.abstract_commands.contains_key(representation)
 	}
 
 	pub fn contains_command(&self, command: &Command) -> bool {
@@ -663,18 +670,23 @@ impl CommandInformationSet {
 	}
 
 	pub fn get_size(&self) -> usize {
-		self.commands.len()
+		self.concrete_commands.len() + self.abstract_commands.len()
 	}
 
 	pub fn to_string(&self) -> String {
-		self.commands.values().map(|info| {
-			let actions = match info {
-				Information::Concrete(concrete_info) => concrete_info.get_actions(),
-				Information::Abstract(abstract_info) => abstract_info.get_potential_command_information().get_actions(),
-			};
+		let mut list = self.concrete_commands.values().map(|info| {
+			let actions = info.get_actions();
 			let representation = compute_string_representation_of_actions(actions);
 			representation
-		}).collect::<Vec<String>>().join("\n")
+		}).collect::<Vec<String>>();
+		list.extend(
+			self.abstract_commands.values().map(|info| {
+				let actions = info.get_potential_command_information().get_actions();
+				let representation = compute_string_representation_of_actions(actions);
+				representation
+			})
+		);
+		list.join("\n")
 	}
 }
 
@@ -702,12 +714,29 @@ pub fn compare_information(
 	b_info.get_number_of_times_used().cmp(&a_info.get_number_of_times_used())
 }
 
+pub struct GeneratedCommands {
+	pub concrete: Vec<PotentialCommandInformation>,
+	pub abs: Vec<PotentialAbstractCommandInformation>,
+}
+
+pub fn create_sorted_info(
+	commands: &GeneratedCommands
+) -> Vec<Information> {
+	let mut sorted_info = Vec::new();
+	sorted_info.extend(commands.concrete.iter().map(|info| Information::Concrete(info.clone())));
+	sorted_info.extend(commands.abs.iter().map(|info| Information::Abstract(info.clone())));
+	sorted_info.sort_by(compare_information);
+	sorted_info
+}
+
 pub fn compute_recommendations_from_record(
 	record: &[Entry],
 	max_chain_size: u32,
-) -> Vec<Information> {
+) -> GeneratedCommands {
 	let command_set = create_command_information_set_from_record(record, max_chain_size);
-	let mut recommended_commands = command_set.get_commands_meeting_condition(basic_command_filter);
-	recommended_commands.sort_by(|a, b| compare_information(a, b));
-	recommended_commands
+	let recommendations = GeneratedCommands {
+		concrete: command_set.get_concrete_commands_meeting_condition(basic_concrete_command_filter),
+		abs: command_set.get_abstract_commands_meeting_condition(basic_abstract_command_filter),
+	};
+	recommendations
 }
