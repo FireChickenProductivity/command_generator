@@ -608,21 +608,22 @@ fn create_commands(
 	println!("number of threads available: {}", number_of_threads);
 	let chains_per_thread = record.len() / number_of_threads;
 	let mut handles = Vec::new();
+	let record_length = record.len();
 	let record = Arc::new(record);
 	for thread_number in 0..number_of_threads.into() {
 		let starting_index = chains_per_thread*thread_number;
 		let end_index = if thread_number == number_of_threads - 1 {
-			record.len()
+			record_length
 		} else {
 			starting_index + chains_per_thread
 		};
-		let record_clone = Arc::clone(&record);
 		let concrete_commands_clone = Arc::clone(&concrete_commands);
 		let abstract_commands_clone = Arc::clone(&abstract_commands);
+		let record_clone = Arc::clone(&record);
 		let handle = thread::spawn(
 			move || {
 				for chain in starting_index..end_index {
-					let target = record_clone.len().min(chain + max_chain_size as usize);
+					let target = record_length.min(chain + max_chain_size as usize);
 					let mut command_chain = CommandChain::empty(chain);
 					for chain_ending_index in chain..target {
 						if should_command_chain_not_cross_entry_at_record_index(&record_clone, chain, chain_ending_index) {
