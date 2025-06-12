@@ -15,7 +15,7 @@ use crate::text_separation::{
 	has_valid_case,
 };
 use std::collections::{HashMap, HashSet};
-use std::sync::{Mutex, Arc};
+use std::sync::{Mutex, Arc, MutexGuard};
 use std::thread;
 use std::num::NonZero;
 
@@ -564,9 +564,7 @@ pub fn create_abstract_commands(command_chain: &CommandChain) -> Vec<AbstractCom
 
 
 
-fn process_abstract_command_usage(abstract_commands: &Arc<Mutex<HashMap<String, PotentialAbstractCommandInformation>>>, instantiation: AbstractCommandInstantiation) {
-	let representation = compute_string_representation_of_chain_actions(&instantiation.command_chain);
-	let mut abstract_commands = abstract_commands.lock().unwrap();
+fn process_abstract_command_usage(abstract_commands: &mut MutexGuard<HashMap<String, PotentialAbstractCommandInformation>>, instantiation: AbstractCommandInstantiation, representation: String) {
 	if let Some(info) = abstract_commands.get_mut(&representation) {
 		info.process_usage(instantiation);
 	} else {
@@ -579,8 +577,12 @@ fn process_abstract_command_usage(abstract_commands: &Arc<Mutex<HashMap<String, 
 
 pub fn handle_needed_abstract_commands(abstract_commands: &Arc<Mutex<HashMap<String, PotentialAbstractCommandInformation>>>, command_chain: &CommandChain) {
 	let abstractions = create_abstract_commands(command_chain);
-	for abstract_command in abstractions {
-		process_abstract_command_usage(abstract_commands, abstract_command);
+	let representations = abstractions.iter()
+		.map(|command| compute_string_representation_of_chain_actions(&command.command_chain))
+		.collect::<Vec<String>>();
+	let mut abstract_commands = abstract_commands.lock().unwrap();
+	for (abstract_command, representation) in abstractions.into_iter().zip(representations.into_iter()) {
+		process_abstract_command_usage(&mut abstract_commands, abstract_command, representation);
 	}
 }
 
