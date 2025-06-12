@@ -20,7 +20,7 @@ fn compute_number_of_words(command_chain: &CommandChain) -> u32 {
 	command_chain.get_command().get_name().split_whitespace().count() as u32
 }
 
-
+#[derive(Clone)]
 pub struct PotentialCommandInformation {
 	actions: Vec<BasicAction>,
 	number_of_times_used: usize,
@@ -98,6 +98,7 @@ impl PotentialCommandInformation {
 	}
 }
 
+#[derive(Clone)]
 pub struct ActionSet {
 	set: HashSet<String>,
 }
@@ -139,6 +140,7 @@ pub struct AbstractCommandInstantiation {
 	pub words_saved: u32,
 }
 
+#[derive(Clone)]
 pub struct PotentialAbstractCommandInformation {
 	instantiation_set: ActionSet,
 	number_of_words_saved: u32,
@@ -185,7 +187,8 @@ impl PotentialAbstractCommandInformation {
 	}
 }
 
-enum Information {
+#[derive(Clone)]
+pub enum Information {
 	Concrete(PotentialCommandInformation),
 	Abstract(PotentialAbstractCommandInformation),
 }
@@ -639,8 +642,11 @@ impl CommandInformationSet {
 	pub fn get_commands_meeting_condition(
 		&self,
 		condition: fn(&Information) -> bool,
-	) -> Vec<&Information> {
-		self.commands.values().filter(|info| condition(info)).collect()
+	) -> Vec<Information> {
+		self.commands.values()
+			.filter(|info| condition(info))
+			.cloned()
+			.collect()
 	}
 
 	pub fn contains_command_with_representation(&self, representation: &str) -> bool {
@@ -666,4 +672,37 @@ impl CommandInformationSet {
 			representation
 		}).collect::<Vec<String>>().join("\n")
 	}
+}
+
+fn create_command_information_set_from_record(record: &[Entry], max_chain_size: u32) -> CommandInformationSet {
+	let mut command_set = CommandInformationSet::new();
+	for chain in 0..record.len() {
+		command_set.process_chain_usage_sequentially(record, chain, chain + max_chain_size as usize);
+	}
+	command_set
+}
+
+pub fn compare_information(
+	a: &Information,
+	b: &Information,
+) -> std::cmp::Ordering {
+	let a_info = match a {
+		Information::Concrete(info) => info,
+		Information::Abstract(info) => &info.get_potential_command_information(),
+	};
+	let b_info = match b {
+		Information::Concrete(info) => info,
+		Information::Abstract(info) => &info.get_potential_command_information(),
+	};
+	b_info.get_number_of_times_used().cmp(&a_info.get_number_of_times_used())
+}
+
+pub fn compute_recommendations_from_record(
+	record: &[Entry],
+	max_chain_size: u32,
+) -> Vec<Information> {
+	let command_set = create_command_information_set_from_record(record, max_chain_size);
+	let mut recommended_commands = command_set.get_commands_meeting_condition(basic_command_filter);
+	recommended_commands.sort_by(|a, b| compare_information(a, b));
+	recommended_commands
 }
