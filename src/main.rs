@@ -3,10 +3,12 @@ mod action_records;
 mod recommendation_generation;
 mod action_utilities;
 mod text_separation;
+mod data_output;
 
 use action_records::{BasicAction, Argument, Command, read_file_record, Entry};
 use recommendation_generation::{compute_recommendations_from_record, PotentialCommandInformation};
 use std::time::Instant;
+use data_output::{create_data_directory, output_recommendations};
 
 fn print_record(record: Result<Vec<Entry>, String>) {
 	match record {
@@ -27,6 +29,13 @@ fn print_record(record: Result<Vec<Entry>, String>) {
 
 
 fn main() {
+	match create_data_directory() {
+		Ok(_) => {}
+		Err(e) => {
+			println!("Error creating data directory: {}", e);
+			return;
+		}
+	}
 	let parameters = input_parsing::get_input_parameters_from_user();
 	let start_time = Instant::now();
 	println!("Reading file");
@@ -37,6 +46,7 @@ fn main() {
 			compute_recommendations_from_record(&record, parameters.max_chain_size);
 			let elapsed_time = start_time.elapsed();
 			println!("Time taken to compute recommendations: {:.3?}", elapsed_time);
+			println!("Created {} recommendations.", record.len());
 		}
 		Err(e) => println!("Error reading record file:\n	{}", e),
 	}
