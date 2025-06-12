@@ -43,10 +43,13 @@ fn main() {
 	match record {
 		Ok(record) => {
 			println!("Generating recommendations");
-			compute_recommendations_from_record(&record, parameters.max_chain_size);
+			let recommendations = compute_recommendations_from_record(&record, parameters.max_chain_size);
 			let elapsed_time = start_time.elapsed();
 			println!("Time taken to compute recommendations: {:.3?}", elapsed_time);
 			println!("Created {} recommendations.", record.len());
+			output_recommendations(&recommendations, "file")
+				.unwrap_or_else(|e| println!("Error writing recommendations to file: {}", e));
+			println!("Recommendations written to file.");
 		}
 		Err(e) => println!("Error reading record file:\n	{}", e),
 	}
