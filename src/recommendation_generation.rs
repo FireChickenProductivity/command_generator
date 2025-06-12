@@ -395,7 +395,7 @@ fn find_prose_match_for_command_given_insert_at_interval(
 ) -> Result<ProseMatch, ()> {
 	let prose = generate_prose_from_words(words, starting_index, prose_size);
 	let analyzer = compute_text_analyzer_for_prose_and_insert(&prose, insert);
-	if analyzer.is_prose_separator_consistent() && analyzer.has_found_prose() && has_valid_case(&analyzer) {
+	if analyzer.has_found_prose() && analyzer.is_prose_separator_consistent() && has_valid_case(&analyzer) {
 		let command_name = generate_prose_command_name(words, starting_index, prose_size);
 		Ok(ProseMatch {
 			analyzer,
@@ -677,7 +677,8 @@ impl CommandInformationSet {
 fn create_command_information_set_from_record(record: &[Entry], max_chain_size: u32) -> CommandInformationSet {
 	let mut command_set = CommandInformationSet::new();
 	for chain in 0..record.len() {
-		command_set.process_chain_usage_sequentially(record, chain, chain + max_chain_size as usize);
+		let target = record.len().min(chain + max_chain_size as usize);
+		command_set.process_chain_usage_sequentially(record, chain, target);
 	}
 	command_set
 }

@@ -29,11 +29,13 @@ fn print_record(record: Result<Vec<Entry>, String>) {
 fn main() {
 	let parameters = input_parsing::get_input_parameters_from_user();
 	let start_time = Instant::now();
+	println!("Reading file");
 	let record = read_file_record(parameters.record_file);
 	match record {
 		Ok(record) => {
-			let elapsed_time = start_time.elapsed();
+			println!("Generating recommendations");
 			compute_recommendations_from_record(&record, parameters.max_chain_size);
+			let elapsed_time = start_time.elapsed();
 			println!("Time taken to compute recommendations: {:.3?}", elapsed_time);
 		}
 		Err(e) => println!("Error reading record file:\n	{}", e),
