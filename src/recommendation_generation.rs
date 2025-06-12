@@ -599,10 +599,9 @@ fn process_concrete_command_usage(concrete_commands: &Arc<Mutex<HashMap<String, 
 }
 
 fn create_commands(
-	record: &[Entry],
+	record: Vec<Entry>,
 	max_chain_size: u32,
 ) -> GeneratedCommands {
-	let record = record.to_vec();
 	let concrete_commands = Arc::new(Mutex::new(HashMap::new()));
 	let abstract_commands = Arc::new(Mutex::new(HashMap::new()));
 	let number_of_threads = thread::available_parallelism().unwrap_or(NonZero::new(1).unwrap()).get();
@@ -690,10 +689,9 @@ pub fn create_sorted_info(
 }
 
 pub fn compute_recommendations_from_record(
-	record: &[Entry],
+	record: Vec<Entry>,
 	max_chain_size: u32,
 ) -> GeneratedCommands {
-	
 	let recommendations = create_commands(record, max_chain_size);
 	recommendations
 }

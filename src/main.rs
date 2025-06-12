@@ -43,7 +43,7 @@ fn main() {
 	match record {
 		Ok(record) => {
 			println!("Generating recommendations");
-			let recommendations = compute_recommendations_from_record(&record, parameters.max_chain_size);
+			let recommendations = compute_recommendations_from_record(record, parameters.max_chain_size);
 			let elapsed_time = start_time.elapsed();
 			let output = create_sorted_info(&recommendations);
 			println!("Time taken to compute recommendations: {:.3?}", elapsed_time);
