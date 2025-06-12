@@ -15,6 +15,7 @@ use crate::text_separation::{
 	has_valid_case,
 };
 use std::collections::{HashMap, HashSet};
+use std::hash::Hash;
 use std::sync::{Mutex, Arc};
 use std::thread;
 
@@ -560,134 +561,70 @@ pub fn create_abstract_commands(command_chain: &CommandChain) -> Vec<AbstractCom
 	commands
 }
 
-pub struct CommandInformationSet {
-	concrete_commands: HashMap<String, PotentialCommandInformation>,
-	abstract_commands: HashMap<String, PotentialAbstractCommandInformation>,
+
+
+
+fn process_abstract_command_usage(abstract_commands: &mut HashMap<String, PotentialAbstractCommandInformation>, instantiation: AbstractCommandInstantiation) {
+	let representation = compute_string_representation_of_chain_actions(&instantiation.command_chain);
+	if let Some(info) = abstract_commands.get_mut(&representation) {
+		info.process_usage(instantiation);
+	} else {
+		abstract_commands.insert(
+			representation,
+			PotentialAbstractCommandInformation::new(instantiation),
+		);
+	}
 }
 
-impl CommandInformationSet {
-	pub fn new() -> Self {
-		Self {
-			concrete_commands: HashMap::new(),
-			abstract_commands: HashMap::new(),
-		}
+pub fn handle_needed_abstract_commands(abstract_commands: &mut HashMap<String, PotentialAbstractCommandInformation>, command_chain: &CommandChain) {
+	let abstractions = create_abstract_commands(command_chain);
+	for abstract_command in abstractions {
+		process_abstract_command_usage(abstract_commands, abstract_command);
 	}
+}
 
-	pub fn process_abstract_command_usage(&mut self, instantiation: AbstractCommandInstantiation) {
-		let representation = compute_string_representation_of_chain_actions(&instantiation.command_chain);
-		if let Some(info) = self.abstract_commands.get_mut(&representation) {
-			info.process_usage(instantiation);
-		} else {
-			self.abstract_commands.insert(
-				representation,
-				PotentialAbstractCommandInformation::new(instantiation),
-			);
-		}
+fn process_concrete_command_usage(concrete_commands: &mut HashMap<String, PotentialCommandInformation>, command_chain: &CommandChain) {
+	let representation = compute_string_representation_of_chain_actions(command_chain);
+	if let Some(info) = concrete_commands.get_mut(&representation) {
+		info.process_usage(command_chain);
+	} else {
+		let mut concrete_info = PotentialCommandInformation::new(command_chain.get_command().get_actions().clone());
+		concrete_info.process_relevant_usage(command_chain);
+		concrete_commands.insert(representation, concrete_info);
 	}
+}
 
-	pub fn handle_needed_abstract_commands(&mut self, command_chain: &CommandChain) {
-		let abstract_commands = create_abstract_commands(command_chain);
-		for abstract_command in abstract_commands {
-			self.process_abstract_command_usage(abstract_command);
-		}
-	}
-
-	pub fn process_concrete_command_usage(&mut self, command_chain: &CommandChain) {
-		let representation = compute_string_representation_of_chain_actions(command_chain);
-		if let Some(info) = self.concrete_commands.get_mut(&representation) {
-			info.process_usage(command_chain);
-		} else {
-			let mut concrete_info = PotentialCommandInformation::new(command_chain.get_command().get_actions().clone());
-			concrete_info.process_relevant_usage(command_chain);
-			self.concrete_commands.insert(representation, concrete_info);
-		}
-	}
-
-	pub fn process_command_usage(&mut self, command_chain: &CommandChain) {
-		self.process_concrete_command_usage(command_chain);
-		self.handle_needed_abstract_commands(command_chain);
-	}
-
-	pub fn process_partial_chain_usage(&mut self, record: &[Entry], command_chain: &mut CommandChain) {
-		add_next_record_command_to_chain(record, command_chain);
-		let simplified_command_chain = simplify_command_chain(command_chain);
-		self.process_command_usage(&simplified_command_chain);
-	}
-
-	fn process_chain_usage_sequentially(
-		&mut self,
-		record: &[Entry],
-		chain: usize,
-		chain_target: usize,
-	) {
+fn create_commands(
+	record: &[Entry],
+	max_chain_size: u32,
+) -> GeneratedCommands {
+	let mut concrete_commands = HashMap::new();
+	let mut abstract_commands = HashMap::new();
+	for chain in 0..record.len() {
+		let target = record.len().min(chain + max_chain_size as usize);
 		let mut command_chain = CommandChain::new(Command::new("", Vec::new(), None), chain, 0);
-		for chain_ending_index in chain..chain_target {
+		for chain_ending_index in chain..target {
 			if should_command_chain_not_cross_entry_at_record_index(record, chain, chain_ending_index) {
 				break;
 			}
-			self.process_partial_chain_usage(record, &mut command_chain);
+			add_next_record_command_to_chain(record, &mut command_chain);
+			let simplified_command_chain = simplify_command_chain(&command_chain);
+			process_concrete_command_usage(&mut concrete_commands, &simplified_command_chain);
+			handle_needed_abstract_commands(&mut abstract_commands, &simplified_command_chain);
 		}
 	}
-
-	pub fn get_concrete_commands_meeting_condition(
-		&self,
-		condition: fn(&PotentialCommandInformation) -> bool,
-	) -> Vec<PotentialCommandInformation> {
-		self.concrete_commands
+	GeneratedCommands {
+		concrete: concrete_commands
 			.values()
-			.filter(|info| condition(info))
-			.map(|info| info.clone())
-			.collect()
-	}
-
-	pub fn get_abstract_commands_meeting_condition(
-		&self,
-		condition: fn(&PotentialAbstractCommandInformation) -> bool,
-	) -> Vec<PotentialAbstractCommandInformation> {
-		self.abstract_commands
+			.filter( | info| basic_concrete_command_filter(info) )
+			.cloned()
+			.collect(),
+		abs: abstract_commands
 			.values()
-			.filter(|info| condition(info))
-			.map(|info| info.clone())
-			.collect()
+			.filter( | info| basic_abstract_command_filter(info) )
+			.cloned()
+			.collect(),
 	}
-
-	pub fn contains_command_with_representation(&self, representation: &str) -> bool {
-		self.concrete_commands.contains_key(representation) || self.abstract_commands.contains_key(representation)
-	}
-
-	pub fn contains_command(&self, command: &Command) -> bool {
-		let representation = compute_string_representation_of_actions(command.get_actions());
- 		self.contains_command_with_representation(&representation)
-	}
-
-	pub fn get_size(&self) -> usize {
-		self.concrete_commands.len() + self.abstract_commands.len()
-	}
-
-	pub fn to_string(&self) -> String {
-		let mut list = self.concrete_commands.values().map(|info| {
-			let actions = info.get_actions();
-			let representation = compute_string_representation_of_actions(actions);
-			representation
-		}).collect::<Vec<String>>();
-		list.extend(
-			self.abstract_commands.values().map(|info| {
-				let actions = info.get_potential_command_information().get_actions();
-				let representation = compute_string_representation_of_actions(actions);
-				representation
-			})
-		);
-		list.join("\n")
-	}
-}
-
-fn create_command_information_set_from_record(record: &[Entry], max_chain_size: u32) -> CommandInformationSet {
-	let mut command_set = CommandInformationSet::new();
-	for chain in 0..record.len() {
-		let target = record.len().min(chain + max_chain_size as usize);
-		command_set.process_chain_usage_sequentially(record, chain, target);
-	}
-	command_set
 }
 
 pub fn compare_information(
@@ -724,10 +661,7 @@ pub fn compute_recommendations_from_record(
 	record: &[Entry],
 	max_chain_size: u32,
 ) -> GeneratedCommands {
-	let command_set = create_command_information_set_from_record(record, max_chain_size);
-	let recommendations = GeneratedCommands {
-		concrete: command_set.get_concrete_commands_meeting_condition(basic_concrete_command_filter),
-		abs: command_set.get_abstract_commands_meeting_condition(basic_abstract_command_filter),
-	};
+	
+	let recommendations = create_commands(record, max_chain_size);
 	recommendations
 }
