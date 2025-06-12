@@ -15,15 +15,15 @@ use crate::text_separation::{
 	has_valid_case,
 };
 use std::collections::{HashMap, HashSet};
-use std::hash::Hash;
 use std::sync::{Mutex, Arc};
 use std::thread;
+use std::num::NonZero;
 
 fn compute_number_of_words(command_chain: &CommandChain) -> u32 {
 	command_chain.get_command().get_name().split_whitespace().count() as u32
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct PotentialCommandInformation {
 	actions: Vec<BasicAction>,
 	number_of_times_used: usize,
@@ -101,7 +101,7 @@ impl PotentialCommandInformation {
 	}
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ActionSet {
 	set: HashSet<String>,
 }
@@ -143,7 +143,7 @@ pub struct AbstractCommandInstantiation {
 	pub words_saved: u32,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct PotentialAbstractCommandInformation {
 	instantiation_set: ActionSet,
 	number_of_words_saved: u32,
@@ -564,8 +564,9 @@ pub fn create_abstract_commands(command_chain: &CommandChain) -> Vec<AbstractCom
 
 
 
-fn process_abstract_command_usage(abstract_commands: &mut HashMap<String, PotentialAbstractCommandInformation>, instantiation: AbstractCommandInstantiation) {
+fn process_abstract_command_usage(abstract_commands: &Arc<Mutex<HashMap<String, PotentialAbstractCommandInformation>>>, instantiation: AbstractCommandInstantiation) {
 	let representation = compute_string_representation_of_chain_actions(&instantiation.command_chain);
+	let mut abstract_commands = abstract_commands.lock().unwrap();
 	if let Some(info) = abstract_commands.get_mut(&representation) {
 		info.process_usage(instantiation);
 	} else {
@@ -576,15 +577,16 @@ fn process_abstract_command_usage(abstract_commands: &mut HashMap<String, Potent
 	}
 }
 
-pub fn handle_needed_abstract_commands(abstract_commands: &mut HashMap<String, PotentialAbstractCommandInformation>, command_chain: &CommandChain) {
+pub fn handle_needed_abstract_commands(abstract_commands: &Arc<Mutex<HashMap<String, PotentialAbstractCommandInformation>>>, command_chain: &CommandChain) {
 	let abstractions = create_abstract_commands(command_chain);
 	for abstract_command in abstractions {
 		process_abstract_command_usage(abstract_commands, abstract_command);
 	}
 }
 
-fn process_concrete_command_usage(concrete_commands: &mut HashMap<String, PotentialCommandInformation>, command_chain: &CommandChain) {
+fn process_concrete_command_usage(concrete_commands: &Arc<Mutex<HashMap<String, PotentialCommandInformation>>>, command_chain: &CommandChain) {
 	let representation = compute_string_representation_of_chain_actions(command_chain);
+	let mut concrete_commands = concrete_commands.lock().unwrap();
 	if let Some(info) = concrete_commands.get_mut(&representation) {
 		info.process_usage(command_chain);
 	} else {
@@ -598,21 +600,49 @@ fn create_commands(
 	record: &[Entry],
 	max_chain_size: u32,
 ) -> GeneratedCommands {
-	let mut concrete_commands = HashMap::new();
-	let mut abstract_commands = HashMap::new();
-	for chain in 0..record.len() {
-		let target = record.len().min(chain + max_chain_size as usize);
-		let mut command_chain = CommandChain::new(Command::new("", Vec::new(), None), chain, 0);
-		for chain_ending_index in chain..target {
-			if should_command_chain_not_cross_entry_at_record_index(record, chain, chain_ending_index) {
-				break;
+	let record = record.to_vec();
+	let concrete_commands = Arc::new(Mutex::new(HashMap::new()));
+	let abstract_commands = Arc::new(Mutex::new(HashMap::new()));
+	let number_of_threads = thread::available_parallelism().unwrap_or(NonZero::new(1).unwrap()).get();
+	println!("number of threads available: {}", number_of_threads);
+	let chains_per_thread = record.len() / number_of_threads;
+	let mut handles = Vec::new();
+	let record = Arc::new(record);
+	for thread_number in 0..number_of_threads.into() {
+		let starting_index = chains_per_thread*thread_number;
+		let end_index = if thread_number == number_of_threads - 1 {
+			record.len()
+		} else {
+			starting_index + chains_per_thread
+		};
+		let record_clone = Arc::clone(&record);
+		let concrete_commands_clone = Arc::clone(&concrete_commands);
+		let abstract_commands_clone = Arc::clone(&abstract_commands);
+		let handle = thread::spawn(
+			move || {
+				for chain in starting_index..end_index {
+					let target = record_clone.len().min(chain + max_chain_size as usize);
+					let mut command_chain = CommandChain::empty(chain);
+					for chain_ending_index in chain..target {
+						if should_command_chain_not_cross_entry_at_record_index(&record_clone, chain, chain_ending_index) {
+							break;
+						}
+						add_next_record_command_to_chain(&record_clone, &mut command_chain);
+						let simplified_command_chain = simplify_command_chain(&command_chain);
+						process_concrete_command_usage(&concrete_commands_clone, &simplified_command_chain);
+						handle_needed_abstract_commands(&abstract_commands_clone, &simplified_command_chain);
+					}
+				}
 			}
-			add_next_record_command_to_chain(record, &mut command_chain);
-			let simplified_command_chain = simplify_command_chain(&command_chain);
-			process_concrete_command_usage(&mut concrete_commands, &simplified_command_chain);
-			handle_needed_abstract_commands(&mut abstract_commands, &simplified_command_chain);
-		}
+		);
+		handles.push(handle);
 	}
+	for handle in handles {
+		handle.join().expect("Thread panicked");
+	}
+	let concrete_commands = Arc::try_unwrap(concrete_commands).unwrap().into_inner().unwrap();
+	let abstract_commands = Arc::try_unwrap(abstract_commands).unwrap().into_inner().unwrap();
+		
 	GeneratedCommands {
 		concrete: concrete_commands
 			.values()
