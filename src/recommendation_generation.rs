@@ -489,15 +489,15 @@ fn basic_command_filter(info: &Information) -> bool {
 	if let Information::Abstract(abstract_info) = info {
 		if abstract_info.get_potential_command_information().get_average_words_dictated() < 2.0 || abstract_info.get_number_of_instantiations() <= 2{
 			return false;
-			
 		}
 	}
 	let concrete = match info {
 		Information::Concrete(concrete_info) => concrete_info,
 		Information::Abstract(abstract_info) => &abstract_info.get_potential_command_information(),
 	};
+	concrete.get_number_of_times_used() > 1 && (
 	concrete.get_number_of_actions() as f32 / concrete.get_average_words_dictated() < 2.0 ||
-		concrete.get_number_of_actions() as f32 * (concrete.get_number_of_times_used() as f32).sqrt() > concrete.get_average_words_dictated()
+		concrete.get_number_of_actions() as f32 * (concrete.get_number_of_times_used() as f32).sqrt() > concrete.get_average_words_dictated())
 }
 
 fn is_command_after_chain_start_exceeding_time_gap_threshold(
