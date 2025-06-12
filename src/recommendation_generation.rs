@@ -604,8 +604,8 @@ fn create_commands(
 ) -> GeneratedCommands {
 	let concrete_commands = Arc::new(Mutex::new(HashMap::new()));
 	let abstract_commands = Arc::new(Mutex::new(HashMap::new()));
-	let number_of_threads = thread::available_parallelism().unwrap_or(NonZero::new(1).unwrap()).get();
-	println!("number of threads available: {}", number_of_threads);
+	let number_of_threads = thread::available_parallelism().unwrap_or(NonZero::new(1).unwrap()).get().min(4);
+	println!("using {} threads", number_of_threads);
 	let chains_per_thread = record.len() / number_of_threads;
 	let mut handles = Vec::new();
 	let record_length = record.len();
