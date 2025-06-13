@@ -199,6 +199,14 @@ impl Command {
 		});
 		self.name.push_str(command.get_name());
 	}
+
+	pub fn get_actions_mut(&mut self) -> &mut Vec<BasicAction> {
+		&mut self.actions
+	}
+
+	pub fn set_actions(&mut self, actions: Vec<BasicAction>) {
+		self.actions = actions;
+	}
 }
 
 #[derive(Clone)]
@@ -219,6 +227,10 @@ impl CommandChain {
 
 	pub fn get_command(&self) -> &Command {
 		&self.command
+	}
+
+	pub fn get_command_mut(&mut self) -> &mut Command {
+		&mut self.command
 	}
 
 	pub fn get_chain_number(&self) -> usize {
