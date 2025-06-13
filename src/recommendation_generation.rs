@@ -546,14 +546,10 @@ fn simplify_command_chain(command_chain: &CommandChain) -> CommandChain {
 }
 
 pub fn create_abstract_commands(command_chain: &CommandChain) -> Vec<AbstractCommandInstantiation> {
-	let mut commands = Vec::new();
+	let mut commands = make_abstract_prose_representations_for_command(command_chain, DEFAULT_MAX_PROSE_SIZE_TO_CONSIDER);
 	if should_make_abstract_repeat_representation(command_chain) {
 		let abstract_repeat_representation = make_abstract_repeat_representation_for(command_chain);
 		commands.push(abstract_repeat_representation);
-	}
-	let abstract_prose_commands = make_abstract_prose_representations_for_command(command_chain, DEFAULT_MAX_PROSE_SIZE_TO_CONSIDER);
-	for abstract_command in abstract_prose_commands {
-		commands.push(abstract_command);
 	}
 	commands
 }
