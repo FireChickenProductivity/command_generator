@@ -154,7 +154,7 @@ impl BasicAction {
 	}
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Command {
 	name: String,
 	actions: Vec<BasicAction>,
@@ -205,7 +205,7 @@ impl Command {
 	}
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct CommandChain {
 	command: Command,
 	chain_number: usize,

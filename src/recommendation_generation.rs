@@ -18,6 +18,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Mutex, Arc, MutexGuard};
 use std::thread;
 use std::num::NonZero;
+use std::sync::mpsc;
 
 fn compute_number_of_words(command_chain: &CommandChain) -> u32 {
 	command_chain.get_command().get_name().split_whitespace().count() as u32
@@ -137,6 +138,7 @@ impl ActionSet {
 	}
 }
 
+#[derive(Clone, Debug)]
 pub struct AbstractCommandInstantiation {
 	pub command_chain: CommandChain,
 	pub concrete_command: CommandChain,
@@ -564,7 +566,7 @@ pub fn create_abstract_commands(command_chain: &CommandChain) -> Vec<AbstractCom
 
 
 
-fn process_abstract_command_usage(abstract_commands: &mut MutexGuard<HashMap<String, PotentialAbstractCommandInformation>>, instantiation: AbstractCommandInstantiation, representation: String) {
+fn process_abstract_command_usage(abstract_commands: &mut HashMap<String, PotentialAbstractCommandInformation>, instantiation: AbstractCommandInstantiation, representation: String) {
 	if let Some(info) = abstract_commands.get_mut(&representation) {
 		info.process_usage(instantiation);
 	} else {
@@ -575,21 +577,8 @@ fn process_abstract_command_usage(abstract_commands: &mut MutexGuard<HashMap<Str
 	}
 }
 
-pub fn handle_needed_abstract_commands(abstract_commands: &Arc<Mutex<HashMap<String, PotentialAbstractCommandInformation>>>, command_chain: &CommandChain) {
-	let abstractions = create_abstract_commands(command_chain);
-	let representations = abstractions.iter()
-		.map(|command| compute_string_representation_of_chain_actions(&command.command_chain))
-		.collect::<Vec<String>>();
-	let mut abstract_commands = abstract_commands.lock().unwrap();
-	for (abstract_command, representation) in abstractions.into_iter().zip(representations.into_iter()) {
-		process_abstract_command_usage(&mut abstract_commands, abstract_command, representation);
-	}
-}
-
-fn process_concrete_command_usage(concrete_commands: &Arc<Mutex<HashMap<String, PotentialCommandInformation>>>, command_chain: &CommandChain) {
-	let representation = compute_string_representation_of_chain_actions(command_chain);
-	let mut concrete_commands = concrete_commands.lock().unwrap();
-	if let Some(info) = concrete_commands.get_mut(&representation) {
+fn process_concrete_command_usage(concrete_commands: &mut HashMap<String, PotentialCommandInformation>, command_chain: &CommandChain, representation: String) {
+ 	if let Some(info) = concrete_commands.get_mut(&representation) {
 		info.process_usage(command_chain);
 	} else {
 		let mut concrete_info = PotentialCommandInformation::new(command_chain.get_command().get_actions().clone());
@@ -602,48 +591,77 @@ fn create_commands(
 	record: Vec<Entry>,
 	max_chain_size: u32,
 ) -> GeneratedCommands {
-	let concrete_commands = Arc::new(Mutex::new(HashMap::new()));
-	let abstract_commands = Arc::new(Mutex::new(HashMap::new()));
-	let number_of_threads = thread::available_parallelism().unwrap_or(NonZero::new(1).unwrap()).get().min(4);
+	let mut concrete_commands: HashMap<String, PotentialCommandInformation> = HashMap::new();
+	let mut abstract_commands: HashMap<String, PotentialAbstractCommandInformation> = HashMap::new();
+	let number_of_threads = thread::available_parallelism().unwrap_or(NonZero::new(1).unwrap()).get();
 	println!("using {} threads", number_of_threads);
-	let chains_per_thread = record.len() / number_of_threads;
-	let mut handles = Vec::new();
-	let record_length = record.len();
-	let record = Arc::new(record);
-	for thread_number in 0..number_of_threads.into() {
-		let starting_index = chains_per_thread*thread_number;
-		let end_index = if thread_number == number_of_threads - 1 {
-			record_length
-		} else {
-			starting_index + chains_per_thread
-		};
-		let concrete_commands_clone = Arc::clone(&concrete_commands);
-		let abstract_commands_clone = Arc::clone(&abstract_commands);
-		let record_clone = Arc::clone(&record);
-		let handle = thread::spawn(
-			move || {
-				for chain in starting_index..end_index {
-					let target = record_length.min(chain + max_chain_size as usize);
-					let mut command_chain = CommandChain::empty(chain);
-					for chain_ending_index in chain..target {
-						if should_command_chain_not_cross_entry_at_record_index(&record_clone, chain, chain_ending_index) {
-							break;
+	let (tx, rx) = mpsc::channel();
+	{
+		let chains_per_thread = record.len() / number_of_threads;
+		let record_length = record.len();
+		let record = Arc::new(record);
+		let mut threads = Vec::new();
+		for thread_number in 0..number_of_threads.into() {
+			let starting_index = chains_per_thread*thread_number;
+			let end_index = if thread_number == number_of_threads - 1 {
+				record_length
+			} else {
+				starting_index + chains_per_thread
+			};
+			let record_clone = Arc::clone(&record);
+			let tx_clone = tx.clone();
+			let handle = thread::spawn(
+				move || {
+					for chain in starting_index..end_index {
+						if (chain - starting_index) % 100 == 0 {
+							// println!("Processing chain {}/{}", chain - starting_index, end_index - starting_index);
 						}
-						add_next_record_command_to_chain(&record_clone, &mut command_chain);
-						let simplified_command_chain = simplify_command_chain(&command_chain);
-						process_concrete_command_usage(&concrete_commands_clone, &simplified_command_chain);
-						handle_needed_abstract_commands(&abstract_commands_clone, &simplified_command_chain);
+						let target = record_length.min(chain + max_chain_size as usize);
+						let mut command_chain = CommandChain::empty(chain);
+						for chain_ending_index in chain..target {
+							if should_command_chain_not_cross_entry_at_record_index(&record_clone, chain, chain_ending_index) {
+								break;
+							}
+							add_next_record_command_to_chain(&record_clone, &mut command_chain);
+							let simplified_command_chain = simplify_command_chain(&command_chain);
+							let abstract_command_list = create_abstract_commands(&simplified_command_chain);
+							let concrete_command_representation = compute_string_representation_of_chain_actions(&simplified_command_chain);
+							let abstract_command_representations: Vec<String> = abstract_command_list.iter()
+								.map(|command| compute_string_representation_of_chain_actions(&command.command_chain))
+								.collect();
+							tx_clone.send((
+								simplified_command_chain,
+								abstract_command_list,
+								concrete_command_representation,
+								abstract_command_representations,
+							)).expect("Failed to send data from thread");
+						}
 					}
+					println!("Thread {} finished processing chains from {} to {}", thread_number, starting_index, end_index);
 				}
-			}
-		);
-		handles.push(handle);
+			);
+			threads.push(handle);
+		}
+		for handle in threads {
+			handle.join().expect("Thread panicked");
+		}
+		drop(tx);
 	}
-	for handle in handles {
-		handle.join().expect("Thread panicked");
+
+	println!("Combining results");
+	for value in rx {
+		let (simplified_command_chain, abstract_command_list, concrete_command_representation, abstract_command_representations) = value;
+		process_concrete_command_usage(&mut concrete_commands, &simplified_command_chain, concrete_command_representation);
+		for (index, abstract_command) in abstract_command_list.iter().enumerate() {
+			let representation = if index < abstract_command_representations.len() {
+				abstract_command_representations[index].clone()
+			} else {
+				compute_string_representation_of_chain_actions(&abstract_command.command_chain)
+			};
+			process_abstract_command_usage(&mut abstract_commands, abstract_command.clone(), representation);
+		}
+		
 	}
-	let concrete_commands = Arc::try_unwrap(concrete_commands).unwrap().into_inner().unwrap();
-	let abstract_commands = Arc::try_unwrap(abstract_commands).unwrap().into_inner().unwrap();
 		
 	GeneratedCommands {
 		concrete: concrete_commands
