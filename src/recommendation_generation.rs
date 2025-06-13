@@ -346,8 +346,8 @@ fn make_abstract_representation_for_prose_command(command_chain: &CommandChain, 
 	}
 }
 
-struct InsertAction {
-	text: String,
+struct InsertAction<'a> {
+	text: &'a String,
 	index: usize,
 }
 
@@ -360,7 +360,7 @@ fn obtain_inserts_from_command_chain(command_chain: &CommandChain) -> Vec<Insert
 			if is_insert(action) {
 				let insert_text = get_insert_text(action);
 				Some(InsertAction {
-					text: insert_text.to_string(),
+					text: insert_text,
 					index,
 				})
 			} else {
@@ -393,6 +393,14 @@ fn find_prose_match_for_command_given_insert_at_interval(
 	starting_index: usize,
 	prose_size: usize,
 ) -> Result<ProseMatch, ()> {
+	//Can stop early if any word from prose is missing from the insert text
+	let insert_text = insert.text.to_lowercase();
+	for word in words[starting_index..starting_index + prose_size].iter() {
+		if !insert_text.contains(&word.to_lowercase()) {
+			return Err(());
+		}
+	}
+
 	let prose = generate_prose_from_words(words, starting_index, prose_size);
 	let analyzer = compute_text_analyzer_for_prose_and_insert(&prose, insert);
 	if analyzer.has_found_prose() && analyzer.is_prose_separator_consistent() && has_valid_case(&analyzer) {
