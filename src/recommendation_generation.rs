@@ -294,13 +294,6 @@ fn make_abstract_repeat_representation_for(command_chain: &CommandChain) -> Abst
 	}
 }
 
-fn is_prose_inside_text_with_consistent_separator(prose: &str, text: &str) -> bool {
-	let mut text_separation_analyzer = TextSeparationAnalyzer::new_from_text(text);
-	text_separation_analyzer.search_for_prose_in_separated_part(prose);
-	text_separation_analyzer.is_prose_separator_consistent();
-	text_separation_analyzer.has_found_prose()
-}
-
 struct ProseMatch {
 	analyzer: TextSeparationAnalyzer,
 	name: String,
