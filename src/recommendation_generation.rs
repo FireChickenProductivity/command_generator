@@ -206,12 +206,50 @@ fn compute_command_chain_copy_with_new_name_and_actions(
 	CommandChain::new(new_command, command_chain.get_chain_number(), command_chain.get_size())
 }
 
-fn compute_repeat_simplified_command_chain(command_chain: &CommandChain) -> CommandChain {
-	let mut new_actions = Vec::new();
-	let mut last_non_repeat_action: Option<BasicAction> = None;
-	let mut repeat_count: i32 = 0;
+fn compute_repeat_simplified_command_chain(command_chain: &mut CommandChain, last_actions_ending: usize) {
+	let is_existing_chain = command_chain.get_chain_ending_index() != command_chain.get_chain_number();
+	let mut new_actions = if is_existing_chain {
+		command_chain.get_command().get_actions()[..last_actions_ending+1].to_vec()
+	} else {
+		Vec::new()
+	};
+	let mut last_non_repeat_action: Option<BasicAction> = if is_existing_chain {
+		let last_action = &command_chain.get_command().get_actions()[last_actions_ending];
+		if last_action.get_name() == "repeat" {
+			Some(command_chain.get_command().get_actions()[last_actions_ending - 1].clone())
+		} else {
+			Some(last_action.clone())
+		}
+	} else {
+		None
+	};
 
-	for action in command_chain.get_command().get_actions() {
+	let mut repeat_count: i32 = if is_existing_chain {
+		let last_action = &command_chain.get_command().get_actions().last().unwrap();
+		if last_action.get_name() == "repeat" {
+			if let Argument::IntArgument(count) = last_action.get_arguments().first().unwrap() {
+				*count
+			} else {
+				0
+			}
+		} else {
+			0
+		}
+	} else {
+		0
+	};
+
+	let starting_index = if is_existing_chain {
+		last_actions_ending + 1
+	} else {
+		0
+	};
+
+	if repeat_count > 0 {
+		new_actions.pop();
+	}
+
+	for action in command_chain.get_command().get_actions()[starting_index..].iter() {
 
 		if last_non_repeat_action.is_some() && action == last_non_repeat_action.as_ref().unwrap() {
 			repeat_count += 1;
@@ -229,11 +267,11 @@ fn compute_repeat_simplified_command_chain(command_chain: &CommandChain) -> Comm
 		new_actions.push(create_repeat_action(repeat_count));
 	}
 
-	let new_command = Command::new(command_chain.get_command().get_name(), new_actions, command_chain.get_command().get_seconds_since_last_action());
-	CommandChain::new(new_command, command_chain.get_chain_number(), command_chain.get_size())
+	command_chain.get_command_mut()
+		.set_actions(new_actions);
 }
 
-fn compute_insert_simplified_command_chain(command_chain: &CommandChain) -> CommandChain {
+fn compute_insert_simplified_command_chain(command_chain: &mut CommandChain) {
 	let mut new_actions = Vec::new();
 	let mut current_insert_text = String::new();
 
@@ -253,8 +291,8 @@ fn compute_insert_simplified_command_chain(command_chain: &CommandChain) -> Comm
 		new_actions.push(create_insert_action(current_insert_text.as_str()));
 	}
 
-	let new_command = Command::new(command_chain.get_command().get_name(), new_actions, command_chain.get_command().get_seconds_since_last_action());
-	CommandChain::new(new_command, command_chain.get_chain_number(), command_chain.get_size())
+	command_chain.get_command_mut()
+		.set_actions(new_actions);
 }
 
 fn should_make_abstract_repeat_representation(command_chain: &CommandChain) -> bool {
@@ -539,10 +577,9 @@ fn add_next_record_command_to_chain(
 	}
 }
 
-fn simplify_command_chain(command_chain: &CommandChain) -> CommandChain {
-	let mut simplified_chain = compute_insert_simplified_command_chain(command_chain);
-	simplified_chain = compute_repeat_simplified_command_chain(&simplified_chain);
-	simplified_chain
+fn simplify_command_chain(command_chain: &mut CommandChain, last_actions_ending: usize) {
+	compute_insert_simplified_command_chain(command_chain);
+	compute_repeat_simplified_command_chain(command_chain, last_actions_ending);
 }
 
 pub fn create_abstract_commands(command_chain: &CommandChain) -> Vec<AbstractCommandInstantiation> {
@@ -596,14 +633,16 @@ fn create_commands(
 	for chain in 0..record.len() {
 		let target = record.len().min(chain + max_chain_size as usize);
 		let mut command_chain = CommandChain::new(Command::new("", Vec::new(), None), chain, 0);
+		let mut last_actions_ending = 0;
 		for chain_ending_index in chain..target {
 			if should_command_chain_not_cross_entry_at_record_index(record, chain, chain_ending_index) {
 				break;
 			}
 			add_next_record_command_to_chain(record, &mut command_chain);
-			let simplified_command_chain = simplify_command_chain(&command_chain);
-			process_concrete_command_usage(&mut concrete_commands, &simplified_command_chain);
-			handle_needed_abstract_commands(&mut abstract_commands, &simplified_command_chain);
+			simplify_command_chain(&mut command_chain, last_actions_ending);
+			last_actions_ending = command_chain.get_command().get_actions().len() - 1;
+			process_concrete_command_usage(&mut concrete_commands, &command_chain);
+			handle_needed_abstract_commands(&mut abstract_commands, &command_chain);
 		}
 	}
 	GeneratedCommands {
