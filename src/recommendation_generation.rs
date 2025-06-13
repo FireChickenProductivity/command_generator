@@ -595,7 +595,7 @@ fn create_commands(
 	let mut abstract_commands = HashMap::new();
 	for chain in 0..record.len() {
 		let target = record.len().min(chain + max_chain_size as usize);
-		let mut command_chain = CommandChain::new(Command::new("", Vec::new(), None), chain, 0);
+		let mut command_chain = CommandChain::empty(chain);
 		for chain_ending_index in chain..target {
 			if should_command_chain_not_cross_entry_at_record_index(record, chain, chain_ending_index) {
 				break;

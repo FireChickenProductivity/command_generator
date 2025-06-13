@@ -197,6 +197,9 @@ impl Command {
 		command.actions.iter().for_each(|action| {
 			self.actions.push(action.clone());
 		});
+		if !self.name.is_empty()  {
+			self.name.push(' ');
+		}
 		self.name.push_str(command.get_name());
 	}
 
@@ -217,6 +220,14 @@ pub struct CommandChain {
 }
 
 impl CommandChain {
+	pub fn empty(chain_number: usize) -> Self {
+		CommandChain {
+			command: Command::new("", Vec::new(), None),
+			chain_number,
+			chain_size: 0,
+		}
+	}
+
 	pub fn new(command: Command, chain_number: usize, chain_size: usize) -> Self {
 		CommandChain {
 			command,
