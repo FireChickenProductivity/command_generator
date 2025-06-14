@@ -736,23 +736,19 @@ fn create_commands(record: &[Entry], max_chain_size: u32) -> GeneratedCommands {
                 .get_actions()
                 .iter()
                 .enumerate()
-                .filter_map(|(index, action)| {
+                .for_each(|(index, action)| {
                     if is_insert(action) {
                         let insert_text = get_insert_text(action);
-                        Some(InsertAction {
+                        let insert = InsertAction {
                             text: insert_text,
                             index,
-                        })
-                    } else {
-                        None
+                        };
+                        process_insert_action(
+                            &simplified_command_chain,
+                            &insert,
+                            &mut abstract_commands,
+                        )
                     }
-                })
-                .for_each(|insert| {
-                    process_insert_action(
-                        &simplified_command_chain,
-                        &insert,
-                        &mut abstract_commands,
-                    );
                 });
             if should_make_abstract_repeat_representation(&simplified_command_chain) {
                 let abstract_repeat_representation =
