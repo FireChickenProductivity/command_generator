@@ -681,6 +681,37 @@ fn process_concrete_command_usage(
     }
 }
 
+fn process_insert_action(
+    simplified_command_chain: &CommandChain,
+    insert: &InsertAction,
+    abstract_commands: &mut HashMap<String, PotentialAbstractCommandInformation>,
+) {
+    let dictation = simplified_command_chain.get_command().get_name();
+    let words: Vec<&str> = dictation.split_whitespace().collect();
+    for starting_index in 0..words.len() {
+        let maximum_size = DEFAULT_MAX_PROSE_SIZE_TO_CONSIDER.min(words.len() - starting_index + 1);
+        for prose_size in 1..maximum_size {
+            if let Ok(match_found) = find_prose_match_for_command_given_insert_at_interval(
+                &words,
+                &insert,
+                starting_index,
+                prose_size,
+            ) {
+                let abstract_representation = make_abstract_representation_for_prose_command(
+                    &simplified_command_chain,
+                    &match_found,
+                    insert.index,
+                );
+                if is_acceptable_abstract_representation(&abstract_representation.command_chain) {
+                    process_abstract_command_usage(abstract_commands, abstract_representation);
+                }
+            } else {
+                break;
+            }
+        }
+    }
+}
+
 fn create_commands(record: &[Entry], max_chain_size: u32) -> GeneratedCommands {
     let mut concrete_commands = HashMap::new();
     let mut abstract_commands = HashMap::new();
@@ -716,39 +747,11 @@ fn create_commands(record: &[Entry], max_chain_size: u32) -> GeneratedCommands {
                     }
                 })
                 .for_each(|insert| {
-                    let dictation = command_chain.get_command().get_name();
-                    let words: Vec<&str> = dictation.split_whitespace().collect();
-                    for starting_index in 0..words.len() {
-                        let maximum_size = DEFAULT_MAX_PROSE_SIZE_TO_CONSIDER
-                            .min(words.len() - starting_index + 1);
-                        for prose_size in 1..maximum_size {
-                            if let Ok(match_found) =
-                                find_prose_match_for_command_given_insert_at_interval(
-                                    &words,
-                                    &insert,
-                                    starting_index,
-                                    prose_size,
-                                )
-                            {
-                                let abstract_representation =
-                                    make_abstract_representation_for_prose_command(
-                                        &simplified_command_chain,
-                                        &match_found,
-                                        insert.index,
-                                    );
-                                if is_acceptable_abstract_representation(
-                                    &abstract_representation.command_chain,
-                                ) {
-                                    process_abstract_command_usage(
-                                        &mut abstract_commands,
-                                        abstract_representation,
-                                    );
-                                }
-                            } else {
-                                break;
-                            }
-                        }
-                    }
+                    process_insert_action(
+                        &simplified_command_chain,
+                        &insert,
+                        &mut abstract_commands,
+                    );
                 });
             if should_make_abstract_repeat_representation(&simplified_command_chain) {
                 let abstract_repeat_representation =
