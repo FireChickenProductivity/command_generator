@@ -21,7 +21,6 @@ impl Worker {
         let thread = thread::spawn(move || {
             loop {
                 let job = receiver.lock().unwrap().recv().unwrap();
-                println!("Worker {} received a job", id);
                 job();
                 let mut numb_jobs = num_jobs.lock().unwrap();
                 *numb_jobs -= 1;
@@ -79,7 +78,6 @@ impl ThreadPool {
             if num_jobs == 0 {
                 break;
             }
-            // thread::sleep(std::time::Duration::from_millis(100));
         }
     }
 }

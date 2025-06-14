@@ -715,8 +715,9 @@ fn process_insert_action(
 fn create_commands(record: &[Entry], max_chain_size: u32) -> GeneratedCommands {
     let mut concrete_commands = HashMap::new();
     let mut abstract_commands = HashMap::new();
-    let pool = pool::ThreadPool::create_with_max_threads();
+    // let pool = pool::ThreadPool::create_with_max_threads();
     for chain in 0..record.len() {
+        println!("Processing chain {}/{}", chain + 1, record.len());
         let target = record.len().min(chain + max_chain_size as usize);
         let mut command_chain = CommandChain::empty(chain);
         for chain_ending_index in chain..target {
