@@ -40,6 +40,11 @@ impl ThreadPool {
         Self { workers, sender }
     }
 
+    pub fn create_with_max_threads() -> Self {
+        let size = thread::available_parallelism().map_or(1, |n| n.get());
+        Self::new(size)
+    }
+
     pub fn execute<F>(&self, f: F)
     where
         F: FnOnce() + Send + 'static,
