@@ -4,6 +4,7 @@ mod recommendation_generation;
 mod action_utilities;
 mod text_separation;
 mod data_output;
+mod pool;
 
 use action_records::{BasicAction, Argument, Command, read_file_record, Entry};
 use recommendation_generation::{compute_recommendations_from_record, PotentialCommandInformation, create_sorted_info};
