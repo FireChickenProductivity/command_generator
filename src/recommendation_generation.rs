@@ -716,25 +716,37 @@ fn create_commands(record: &[Entry], max_chain_size: u32) -> GeneratedCommands {
                     }
                 })
                 .for_each(|insert| {
-                    let prose_matches = find_prose_matches_for_command_given_insert(
-                        &simplified_command_chain,
-                        &insert,
-                        DEFAULT_MAX_PROSE_SIZE_TO_CONSIDER,
-                    );
-                    for match_found in prose_matches {
-                        let abstract_representation =
-                            make_abstract_representation_for_prose_command(
-                                &simplified_command_chain,
-                                &match_found,
-                                insert.index,
-                            );
-                        if is_acceptable_abstract_representation(
-                            &abstract_representation.command_chain,
-                        ) {
-                            process_abstract_command_usage(
-                                &mut abstract_commands,
-                                abstract_representation,
-                            );
+                    let dictation = command_chain.get_command().get_name();
+                    let words: Vec<&str> = dictation.split_whitespace().collect();
+                    for starting_index in 0..words.len() {
+                        let maximum_size = DEFAULT_MAX_PROSE_SIZE_TO_CONSIDER
+                            .min(words.len() - starting_index + 1);
+                        for prose_size in 1..maximum_size {
+                            if let Ok(match_found) =
+                                find_prose_match_for_command_given_insert_at_interval(
+                                    &words,
+                                    &insert,
+                                    starting_index,
+                                    prose_size,
+                                )
+                            {
+                                let abstract_representation =
+                                    make_abstract_representation_for_prose_command(
+                                        &simplified_command_chain,
+                                        &match_found,
+                                        insert.index,
+                                    );
+                                if is_acceptable_abstract_representation(
+                                    &abstract_representation.command_chain,
+                                ) {
+                                    process_abstract_command_usage(
+                                        &mut abstract_commands,
+                                        abstract_representation,
+                                    );
+                                }
+                            } else {
+                                break;
+                            }
                         }
                     }
                 });
