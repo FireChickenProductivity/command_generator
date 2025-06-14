@@ -712,6 +712,28 @@ fn process_insert_action(
     }
 }
 
+fn create_insert_action_iterator(
+    command_chain: &CommandChain,
+) -> impl Iterator<Item = InsertAction> {
+    command_chain
+        .get_command()
+        .get_actions()
+        .iter()
+        .enumerate()
+        .filter_map(|(index, action)| {
+            if is_insert(action) {
+                let insert_text = get_insert_text(action);
+                let insert = InsertAction {
+                    text: insert_text,
+                    index,
+                };
+                Some(insert)
+            } else {
+                None
+            }
+        })
+}
+
 fn create_commands(record: &[Entry], max_chain_size: u32) -> GeneratedCommands {
     let mut concrete_commands = HashMap::new();
     let mut abstract_commands = HashMap::new();
@@ -731,25 +753,10 @@ fn create_commands(record: &[Entry], max_chain_size: u32) -> GeneratedCommands {
             add_next_record_command_to_chain(record, &mut command_chain);
             let simplified_command_chain = simplify_command_chain(&command_chain);
             process_concrete_command_usage(&mut concrete_commands, &simplified_command_chain);
-            simplified_command_chain
-                .get_command()
-                .get_actions()
-                .iter()
-                .enumerate()
-                .for_each(|(index, action)| {
-                    if is_insert(action) {
-                        let insert_text = get_insert_text(action);
-                        let insert = InsertAction {
-                            text: insert_text,
-                            index,
-                        };
-                        process_insert_action(
-                            &simplified_command_chain,
-                            &insert,
-                            &mut abstract_commands,
-                        )
-                    }
-                });
+            let insert_iterator = create_insert_action_iterator(&simplified_command_chain);
+            insert_iterator.for_each(|insert| {
+                process_insert_action(&simplified_command_chain, &insert, &mut abstract_commands);
+            });
             if should_make_abstract_repeat_representation(&simplified_command_chain) {
                 let abstract_repeat_representation =
                     make_abstract_repeat_representation_for(&simplified_command_chain);
