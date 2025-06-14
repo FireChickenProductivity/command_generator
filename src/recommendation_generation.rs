@@ -206,12 +206,12 @@ fn compute_command_chain_copy_with_new_name_and_actions(
 	CommandChain::new(new_command, command_chain.get_chain_number(), command_chain.get_size())
 }
 
-fn compute_repeat_simplified_command_chain(command_chain: &CommandChain) -> CommandChain {
+fn compute_repeat_simplified_command_chain(actions: &Vec<BasicAction>) -> Vec<BasicAction> {
 	let mut new_actions = Vec::new();
 	let mut last_non_repeat_action: Option<BasicAction> = None;
 	let mut repeat_count: i32 = 0;
 
-	for action in command_chain.get_command().get_actions() {
+	for action in actions {
 
 		if last_non_repeat_action.is_some() && action == last_non_repeat_action.as_ref().unwrap() {
 			repeat_count += 1;
@@ -229,15 +229,14 @@ fn compute_repeat_simplified_command_chain(command_chain: &CommandChain) -> Comm
 		new_actions.push(create_repeat_action(repeat_count));
 	}
 
-	let new_command = Command::new(command_chain.get_command().get_name(), new_actions, command_chain.get_command().get_seconds_since_last_action());
-	CommandChain::new(new_command, command_chain.get_chain_number(), command_chain.get_size())
+	new_actions
 }
 
-fn compute_insert_simplified_command_chain(command_chain: &CommandChain) -> CommandChain {
+fn compute_insert_simplified_command_chain(actions: &Vec<&BasicAction>) -> Vec<BasicAction> {
 	let mut new_actions = Vec::new();
 	let mut current_insert_text = String::new();
 
-	for action in command_chain.get_command().get_actions() {
+	for action in actions {
 		if is_insert(action) {
 			current_insert_text += get_insert_text(action);
 		} else {
@@ -245,7 +244,7 @@ fn compute_insert_simplified_command_chain(command_chain: &CommandChain) -> Comm
 				new_actions.push(create_insert_action(current_insert_text.as_str()));
 				current_insert_text.clear();
 			}
-			new_actions.push(action.clone());
+			new_actions.push(action.copy());
 		}
 	}
 
@@ -253,8 +252,7 @@ fn compute_insert_simplified_command_chain(command_chain: &CommandChain) -> Comm
 		new_actions.push(create_insert_action(current_insert_text.as_str()));
 	}
 
-	let new_command = Command::new(command_chain.get_command().get_name(), new_actions, command_chain.get_command().get_seconds_since_last_action());
-	CommandChain::new(new_command, command_chain.get_chain_number(), command_chain.get_size())
+	new_actions
 }
 
 fn should_make_abstract_repeat_representation(command_chain: &CommandChain) -> bool {
@@ -540,10 +538,11 @@ fn add_next_record_command_to_chain(
 	}
 }
 
-fn simplify_command_chain(command_chain: &CommandChain) -> CommandChain {
-	let mut simplified_chain = compute_insert_simplified_command_chain(command_chain);
-	simplified_chain = compute_repeat_simplified_command_chain(&simplified_chain);
-	simplified_chain
+fn simplify_command_chain(chain: usize, chain_size: usize, actions: &Vec<&BasicAction>, name: &str) -> CommandChain {
+	let simplified_actions = compute_insert_simplified_command_chain(actions);
+	let repeat_simplified_actions = compute_repeat_simplified_command_chain(&simplified_actions);
+	let command = Command::new(name, repeat_simplified_actions, None);
+	CommandChain::new(command, chain, chain_size)
 }
 
 pub fn create_abstract_commands(command_chain: &CommandChain) -> Vec<AbstractCommandInstantiation> {
@@ -596,13 +595,27 @@ fn create_commands(
 	let mut abstract_commands = HashMap::new();
 	for chain in 0..record.len() {
 		let target = record.len().min(chain + max_chain_size as usize);
-		let mut command_chain = CommandChain::empty(chain);
+		let mut chain_action_references: Vec<&BasicAction> = Vec::new();
+		let mut chain_name = String::new();
 		for chain_ending_index in chain..target {
 			if should_command_chain_not_cross_entry_at_record_index(record, chain, chain_ending_index) {
 				break;
 			}
-			add_next_record_command_to_chain(record, &mut command_chain);
-			let simplified_command_chain = simplify_command_chain(&command_chain);
+			if let Entry::Command(command) = &record[chain_ending_index] {
+				for action in command.get_actions() {
+					chain_action_references.push(action);
+				}
+				if chain_name.is_empty() {
+					chain_name = command.get_name().to_string();
+				} else {
+					chain_name.push_str(" ");
+					chain_name.push_str(&command.get_name());
+				}
+			} else {
+				break;
+			}
+			
+			let simplified_command_chain = simplify_command_chain(chain, chain_ending_index - chain + 1, &chain_action_references, &chain_name);
 			process_concrete_command_usage(&mut concrete_commands, &simplified_command_chain);
 			handle_needed_abstract_commands(&mut abstract_commands, &simplified_command_chain);
 		}

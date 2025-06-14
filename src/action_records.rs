@@ -78,6 +78,13 @@ pub struct BasicAction {
 }
 
 impl BasicAction {
+	pub fn copy(&self) -> Self {
+		BasicAction {
+			name: self.name.clone(),
+			arguments: self.arguments.clone(),
+		}
+	}
+	
 	pub fn new(name: &str, arguments: Vec<Argument>) -> Self {
 		BasicAction {
 			name: String::from(name),
