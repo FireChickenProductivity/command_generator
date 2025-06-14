@@ -1,3 +1,5 @@
+// This thread module is based on the rust book
+
 use std::{
     sync::{Arc, Mutex, mpsc},
     thread,
