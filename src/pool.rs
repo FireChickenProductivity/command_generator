@@ -13,17 +13,11 @@ struct Worker {
 }
 
 impl Worker {
-    fn new(
-        id: usize,
-        receiver: Arc<Mutex<mpsc::Receiver<Job>>>,
-        num_jobs: Arc<Mutex<usize>>,
-    ) -> Self {
+    fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Job>>>) -> Self {
         let thread = thread::spawn(move || {
             loop {
                 let job = receiver.lock().unwrap().recv().unwrap();
                 job();
-                let mut numb_jobs = num_jobs.lock().unwrap();
-                *numb_jobs -= 1;
             }
         });
         Self { id, thread }
@@ -33,7 +27,6 @@ impl Worker {
 pub struct ThreadPool {
     workers: Vec<Worker>,
     sender: mpsc::Sender<Job>,
-    num_jobs: Arc<Mutex<usize>>,
 }
 
 impl ThreadPool {
@@ -41,20 +34,11 @@ impl ThreadPool {
         let mut workers = Vec::with_capacity(size);
         let (sender, receiver) = mpsc::channel();
         let receiver = Arc::new(Mutex::new(receiver));
-        let num_jobs = Arc::new(Mutex::new(0));
 
         for id in 0..size {
-            workers.push(Worker::new(
-                id,
-                Arc::clone(&receiver),
-                Arc::clone(&num_jobs),
-            ));
+            workers.push(Worker::new(id, Arc::clone(&receiver)));
         }
-        Self {
-            workers,
-            sender,
-            num_jobs,
-        }
+        Self { workers, sender }
     }
 
     pub fn create_with_max_threads() -> Self {
@@ -67,17 +51,6 @@ impl ThreadPool {
         F: FnOnce() + Send + 'static,
     {
         let job = Box::new(f);
-        let mut num_jobs = self.num_jobs.lock().unwrap();
-        *num_jobs += 1;
         self.sender.send(job).unwrap();
-    }
-
-    pub fn block_until_finished(&self) {
-        loop {
-            let num_jobs = *self.num_jobs.lock().unwrap();
-            if num_jobs == 0 {
-                break;
-            }
-        }
     }
 }
