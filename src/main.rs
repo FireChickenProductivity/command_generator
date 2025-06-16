@@ -1,5 +1,6 @@
 mod action_records;
 mod action_utilities;
+mod current_time;
 mod data_output;
 mod input_parsing;
 mod pool;
@@ -7,6 +8,7 @@ mod recommendation_generation;
 mod text_separation;
 
 use action_records::{Argument, BasicAction, Command, Entry, read_file_record};
+use current_time::compute_timestamp;
 use data_output::{create_data_directory, output_recommendations};
 use recommendation_generation::{
     PotentialCommandInformation, compute_recommendations_from_record, create_sorted_info,
@@ -56,8 +58,8 @@ fn main() {
                 "Created {} recommendations.",
                 recommendations.concrete.len() + recommendations.abs.len()
             );
-            return;
-            output_recommendations(&output, "file.txt")
+            let file_name = format!("recommendations {}.txt", compute_timestamp());
+            output_recommendations(&output, &file_name)
                 .unwrap_or_else(|e| println!("Error writing recommendations to file: {}", e));
             println!("Recommendations written to file.");
         }
