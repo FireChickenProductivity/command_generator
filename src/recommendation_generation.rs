@@ -18,6 +18,7 @@ fn compute_number_of_words(command_chain: &CommandChain) -> u32 {
 
 #[derive(Clone, Debug)]
 pub struct CommandStatistics {
+    pub actions: Vec<BasicAction>,
     pub number_of_times_used: usize,
     pub number_of_actions: usize,
     pub total_number_of_words_dictated: u32,
@@ -25,8 +26,10 @@ pub struct CommandStatistics {
 }
 
 impl CommandStatistics {
-    pub fn new(number_of_actions: usize) -> Self {
+    pub fn new(actions: Vec<BasicAction>) -> Self {
+        let number_of_actions = compute_number_of_actions(&actions);
         CommandStatistics {
+            actions,
             number_of_times_used: 0,
             number_of_actions: number_of_actions,
             total_number_of_words_dictated: 0,
@@ -49,7 +52,6 @@ impl CommandStatistics {
 
 #[derive(Clone)]
 pub struct PotentialCommandInformation {
-    actions: Vec<BasicAction>,
     statistics: CommandStatistics,
     chain: Option<usize>,
 }
@@ -71,10 +73,8 @@ fn compute_number_of_actions(actions: &Vec<BasicAction>) -> usize {
 
 impl PotentialCommandInformation {
     pub fn new(actions: Vec<BasicAction>) -> Self {
-        let number_of_actions = compute_number_of_actions(&actions);
         PotentialCommandInformation {
-            actions,
-            statistics: CommandStatistics::new(number_of_actions),
+            statistics: CommandStatistics::new(actions),
             chain: None,
         }
     }
@@ -88,7 +88,7 @@ impl PotentialCommandInformation {
     }
 
     pub fn get_actions(&self) -> &Vec<BasicAction> {
-        &self.actions
+        &self.statistics.actions
     }
 
     pub fn process_usage(&mut self, command_chain: &CommandChain) {
