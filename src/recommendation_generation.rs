@@ -38,6 +38,11 @@ impl CommandStatistics {
         }
         self.total_number_of_words_dictated as f32 / self.number_of_times_used as f32
     }
+
+    pub fn process_usage(&mut self, command_chain: &CommandChain) {
+        self.number_of_times_used += 1;
+        self.total_number_of_words_dictated += compute_number_of_words(command_chain);
+    }
 }
 
 #[derive(Clone)]
@@ -94,9 +99,8 @@ impl PotentialCommandInformation {
     }
 
     fn process_relevant_usage(&mut self, command_chain: &CommandChain) {
-        self.statistics.number_of_times_used += 1;
         self.chain = Some(command_chain.get_chain_ending_index());
-        self.statistics.total_number_of_words_dictated += compute_number_of_words(command_chain);
+        self.statistics.process_usage(command_chain);
     }
 
     pub fn get_number_of_words_saved(&self) -> u32 {
