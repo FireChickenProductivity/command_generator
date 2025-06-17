@@ -46,21 +46,18 @@ fn main() {
     match record {
         Ok(record) => {
             println!("Generating recommendations");
-            let recommendations =
+            let mut recommendations =
                 compute_recommendations_from_record(&record, parameters.max_chain_size);
             let elapsed_time = start_time.elapsed();
-            let output = create_sorted_info(&recommendations);
             println!(
                 "Time taken to compute recommendations: {:.3?}",
                 elapsed_time
             );
-            println!(
-                "Created {} recommendations.",
-                recommendations.concrete.len() + recommendations.abs.len()
-            );
+            println!("Created {} recommendations.", recommendations.len());
             return;
+            create_sorted_info(&mut recommendations);
             let file_name = format!("recommendations {}.txt", compute_timestamp());
-            output_recommendations(&output, &file_name)
+            output_recommendations(&recommendations, &file_name)
                 .unwrap_or_else(|e| println!("Error writing recommendations to file: {}", e));
             println!("Recommendations written to file.");
         }

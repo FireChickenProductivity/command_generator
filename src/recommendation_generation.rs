@@ -120,6 +120,10 @@ impl PotentialCommandInformation {
         &self.statistics
     }
 
+    pub fn move_statistics(self) -> CommandStatistics {
+        self.statistics
+    }
+
     pub fn get_statistics_mut(&mut self) -> &mut CommandStatistics {
         &mut self.statistics
     }
@@ -780,7 +784,7 @@ fn create_insert_action_iterator(
         })
 }
 
-fn create_commands(record: &[Entry], max_chain_size: u32) -> GeneratedCommands {
+fn create_commands(record: &[Entry], max_chain_size: u32) -> Vec<CommandStatistics> {
     let mut concrete_commands = HashMap::new();
     let mut abstract_commands = HashMap::new();
     // let pool = pool::ThreadPool::create_with_max_threads();
@@ -816,41 +820,34 @@ fn create_commands(record: &[Entry], max_chain_size: u32) -> GeneratedCommands {
     for info in concrete_commands.values_mut() {
         info.compute_number_of_words_saved();
     }
-    GeneratedCommands {
-        concrete: concrete_commands
-            .values()
-            .filter(|info| basic_concrete_command_filter(info.get_statistics()))
-            .cloned()
-            .collect(),
-        abs: abstract_commands
-            .values()
-            .filter(|info| basic_abstract_command_filter(info))
-            .cloned()
-            .collect(),
-    }
+    let mut statistics = Vec::new();
+    concrete_commands.values().for_each(|info| {
+        if basic_concrete_command_filter(info.get_statistics()) {
+            statistics.push(info.get_statistics().clone());
+        }
+    });
+    abstract_commands.values().for_each(|info| {
+        if basic_abstract_command_filter(info) {
+            let abstract_info = info.get_statistics().clone();
+            statistics.push(abstract_info);
+        }
+    });
+
+    statistics
 }
 
 pub fn compare_information(a: &CommandStatistics, b: &CommandStatistics) -> std::cmp::Ordering {
     b.number_of_times_used.cmp(&a.number_of_times_used)
 }
 
-pub struct GeneratedCommands {
-    pub concrete: Vec<PotentialCommandInformation>,
-    pub abs: Vec<PotentialAbstractCommandInformation>,
-}
-
-pub fn create_sorted_info(commands: &GeneratedCommands) -> Vec<CommandStatistics> {
-    let mut sorted_info = Vec::new();
-    sorted_info.extend(commands.concrete.iter().map(|info| info.statistics.clone()));
-    sorted_info.extend(commands.abs.iter().map(|info| info.statistics.clone()));
-    sorted_info.sort_by(compare_information);
-    sorted_info
+pub fn create_sorted_info(commands: &mut Vec<CommandStatistics>) {
+    commands.sort_by(compare_information);
 }
 
 pub fn compute_recommendations_from_record(
     record: &[Entry],
     max_chain_size: u32,
-) -> GeneratedCommands {
+) -> Vec<CommandStatistics> {
     let recommendations = create_commands(record, max_chain_size);
     recommendations
 }
