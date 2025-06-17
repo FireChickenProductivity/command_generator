@@ -31,6 +31,13 @@ impl CommandStatistics {
             total_number_of_words_dictated: 0,
         }
     }
+
+    pub fn get_average_words_dictated(&self) -> f32 {
+        if self.number_of_times_used == 0 {
+            return 0.0;
+        }
+        self.total_number_of_words_dictated as f32 / self.number_of_times_used as f32
+    }
 }
 
 #[derive(Clone)]
@@ -70,11 +77,7 @@ impl PotentialCommandInformation {
     }
 
     pub fn get_average_words_dictated(&self) -> f32 {
-        if self.statistics.number_of_times_used == 0 {
-            return 0.0;
-        }
-        self.statistics.total_number_of_words_dictated as f32
-            / self.statistics.number_of_times_used as f32
+        self.statistics.get_average_words_dictated()
     }
 
     pub fn get_number_of_times_used(&self) -> usize {
