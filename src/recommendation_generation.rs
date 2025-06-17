@@ -23,6 +23,7 @@ pub struct CommandStatistics {
     pub number_of_actions: usize,
     pub total_number_of_words_dictated: u32,
     pub number_of_words_saved: u32,
+    pub instantiation_set: Option<ActionSet>,
 }
 
 impl CommandStatistics {
@@ -34,6 +35,20 @@ impl CommandStatistics {
             number_of_actions: number_of_actions,
             total_number_of_words_dictated: 0,
             number_of_words_saved: 0,
+            instantiation_set: None,
+        }
+    }
+
+    pub fn new_abstract(actions: Vec<BasicAction>) -> Self {
+        let number_of_actions = compute_number_of_actions(&actions);
+        let instantiation_set = Some(ActionSet::new());
+        CommandStatistics {
+            actions,
+            number_of_times_used: 0,
+            number_of_actions: number_of_actions,
+            total_number_of_words_dictated: 0,
+            number_of_words_saved: 0,
+            instantiation_set,
         }
     }
 
@@ -134,7 +149,7 @@ impl PotentialCommandInformation {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ActionSet {
     set: HashSet<String>,
 }
@@ -182,19 +197,18 @@ pub struct AbstractCommandInstantiation {
 
 #[derive(Clone)]
 pub struct PotentialAbstractCommandInformation {
-    instantiation_set: ActionSet,
-    info: PotentialCommandInformation,
+    statistics: CommandStatistics,
+    chain_handler: ChainHandler,
 }
 
 impl PotentialAbstractCommandInformation {
     pub fn new(instantiation: AbstractCommandInstantiation) -> Self {
         let actions = instantiation.command_chain.get_command().get_actions();
-        let mut potential_command_information = PotentialCommandInformation::new(actions.clone());
-        let statistics = &mut potential_command_information.get_statistics_mut();
+        let mut statistics = CommandStatistics::new_abstract(actions.clone());
         statistics.number_of_words_saved = instantiation.words_saved;
         let mut result = Self {
-            instantiation_set: ActionSet::new(),
-            info: potential_command_information,
+            statistics,
+            chain_handler: ChainHandler::new(),
         };
         result.process_usage(instantiation);
         result
@@ -202,25 +216,35 @@ impl PotentialAbstractCommandInformation {
 
     pub fn process_usage(&mut self, instantiation: AbstractCommandInstantiation) {
         let chain_number = instantiation.command_chain.get_chain_number();
-        if self.info.should_process_usage(chain_number) {
-            let actions = instantiation.concrete_command.get_command().get_actions();
-            self.instantiation_set.insert(&actions);
-            self.info
+        if self.chain_handler.should_process_usage(chain_number) {
+            let actions: &Vec<BasicAction> =
+                instantiation.concrete_command.get_command().get_actions();
+            self.statistics
+                .instantiation_set
+                .as_mut()
+                .unwrap()
+                .insert(actions);
+            self.statistics.process_usage(&instantiation.command_chain);
+            self.chain_handler
                 .process_relevant_usage(&instantiation.command_chain);
-            self.info.get_statistics_mut().number_of_words_saved += instantiation.words_saved;
+            self.statistics.number_of_words_saved += instantiation.words_saved;
         }
     }
 
+    pub fn get_statistics(&self) -> &CommandStatistics {
+        &self.statistics
+    }
+
     pub fn get_number_of_instantiations(&self) -> usize {
-        self.instantiation_set.get_size()
+        self.statistics
+            .instantiation_set
+            .as_ref()
+            .unwrap()
+            .get_size()
     }
 
     pub fn get_instantiation_set(&self) -> &ActionSet {
-        &self.instantiation_set
-    }
-
-    pub fn get_potential_command_information(&self) -> &PotentialCommandInformation {
-        &self.info
+        &self.statistics.instantiation_set.as_ref().unwrap()
     }
 }
 
@@ -233,9 +257,7 @@ pub enum Information {
 pub fn get_information_statistics(info: &Information) -> &CommandStatistics {
     match info {
         Information::Concrete(concrete_info) => concrete_info.get_statistics(),
-        Information::Abstract(abstract_info) => &abstract_info
-            .get_potential_command_information()
-            .get_statistics(),
+        Information::Abstract(abstract_info) => &abstract_info.get_statistics(),
     }
 }
 
@@ -611,21 +633,13 @@ fn basic_concrete_command_filter(info: &CommandStatistics) -> bool {
 }
 
 fn basic_abstract_command_filter(info: &PotentialAbstractCommandInformation) -> bool {
-    if info
-        .get_potential_command_information()
-        .get_statistics()
-        .get_average_words_dictated()
-        < 2.0
+    if info.get_statistics().get_average_words_dictated() < 2.0
         || info.get_number_of_instantiations() <= 2
-        || info
-            .get_potential_command_information()
-            .get_statistics()
-            .number_of_words_saved
-            < 1
+        || info.get_statistics().number_of_words_saved < 1
     {
         return false;
     }
-    basic_concrete_command_filter(info.get_potential_command_information().get_statistics())
+    basic_concrete_command_filter(info.get_statistics())
 }
 
 fn is_command_after_chain_start_exceeding_time_gap_threshold(
@@ -836,11 +850,11 @@ fn create_commands(record: &[Entry], max_chain_size: u32) -> GeneratedCommands {
 pub fn compare_information(a: &Information, b: &Information) -> std::cmp::Ordering {
     let a_info = match a {
         Information::Concrete(info) => info.get_statistics(),
-        Information::Abstract(info) => &info.get_potential_command_information().get_statistics(),
+        Information::Abstract(info) => &info.get_statistics(),
     };
     let b_info = match b {
         Information::Concrete(info) => info.get_statistics(),
-        Information::Abstract(info) => &info.get_potential_command_information().get_statistics(),
+        Information::Abstract(info) => &info.get_statistics(),
     };
     b_info
         .number_of_times_used
