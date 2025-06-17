@@ -1,0 +1,98 @@
+use crate::action_utilities::*;
+use crate::recommendation_generation::CommandStatistics;
+use std::{collections::HashMap, collections::HashSet};
+
+fn compute_number_of_commands_including_action(
+    recommendations: &Vec<CommandStatistics>,
+) -> HashMap<String, usize> {
+    let mut result = HashMap::new();
+    for recommendation in recommendations {
+        let mut unique_actions = HashSet::new();
+        for action in &recommendation.actions {
+            let action_string = action.to_json();
+            unique_actions.insert(action_string);
+        }
+        for unique_action in unique_actions {
+            let count = result.entry(unique_action).or_insert(0);
+            *count += 1;
+        }
+    }
+    result
+}
+
+fn compute_single_inserts_from_commands(
+    recommendations: &Vec<CommandStatistics>,
+) -> HashSet<String> {
+    let mut single_inserts = HashSet::new();
+    for recommendation in recommendations {
+        let actions = &recommendation.actions;
+        if is_insert_only_actions(actions) {
+            let insert_text = get_insert_text_from_insert_only_actions(actions);
+            single_inserts.insert(insert_text.clone());
+        }
+    }
+    single_inserts
+}
+
+fn compute_max_nonidentical_prefix_or_suffix_similarity(
+    text: &str,
+    others: &HashSet<String>,
+) -> usize {
+    let mut best = 0;
+    for other in others {
+        if other != text && other.len() >= best {
+            let smallest_size = usize::min(other.len(), text.len());
+            for i in 1..=smallest_size {
+                let text_sub_string = &text[text.len() - i..];
+                if &other[other.len() - i..] == text_sub_string {
+                    best = usize::max(text_sub_string.len(), best);
+                } else {
+                    break;
+                }
+            }
+            for i in 1..=smallest_size {
+                let text_sub_string = &text[..i];
+                if &other[..i] == text_sub_string {
+                    best = usize::max(text_sub_string.len(), best);
+                } else {
+                    break;
+                }
+            }
+        }
+    }
+    best
+}
+
+fn score_recommendations_weighting_by_inverse_action_frequency(
+    recommendations: &Vec<CommandStatistics>,
+    num_commands_including_action: &HashMap<String, usize>,
+    single_inserts: &HashSet<String>,
+) -> f64 {
+    let mut score = 0.0;
+    for recommendation in recommendations {
+        let actions = &recommendation.actions;
+        if is_insert_only_actions(actions) && single_inserts.len() > 1 {
+            let inserted_text = get_insert_text_from_insert_only_actions(actions);
+            let similarity =
+                compute_max_nonidentical_prefix_or_suffix_similarity(inserted_text, single_inserts);
+            let weight = if similarity == 0 {
+                1.0
+            } else {
+                (inserted_text.len() - similarity) as f64 / inserted_text.len() as f64
+            };
+            score += weight * recommendation.number_of_words_saved as f64;
+        } else {
+            let mut weight = 0.0;
+            for action in actions {
+                let representation = action.to_json();
+                weight += 1.0
+                    / (*num_commands_including_action
+                        .get(&representation)
+                        .unwrap_or(&1)) as f64;
+            }
+            weight /= actions.len() as f64;
+            score += weight * recommendation.number_of_words_saved as f64;
+        }
+    }
+    score
+}

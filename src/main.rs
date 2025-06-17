@@ -5,6 +5,7 @@ mod data_output;
 mod input_parsing;
 mod pool;
 mod recommendation_generation;
+mod recommendation_scoring;
 mod text_separation;
 
 use action_records::{Argument, BasicAction, Command, Entry, read_file_record};
