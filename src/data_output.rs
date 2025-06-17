@@ -34,30 +34,17 @@ pub fn output_recommendations(
     let mut buffered_writer = io::BufWriter::new(file);
 
     for recommendation in recommendations {
-        let mut number_of_words_saved = 0;
+        let statistics = get_information_statistics(recommendation);
 
-        let concrete_info = match recommendation {
-            Information::Concrete(info) => {
-                number_of_words_saved = info.get_statistics().number_of_words_saved;
-                info
-            }
-            Information::Abstract(info) => {
-                number_of_words_saved = info
-                    .get_potential_command_information()
-                    .get_statistics()
-                    .number_of_words_saved;
-                info.get_potential_command_information()
-            }
-        };
         writeln!(
             buffered_writer,
             "#Number of times used: {}",
-            concrete_info.get_statistics().number_of_times_used
+            statistics.number_of_times_used
         )?;
         writeln!(
             buffered_writer,
             "#Number of words saved: {}",
-            number_of_words_saved
+            statistics.number_of_words_saved
         )?;
         if let Information::Abstract(info) = recommendation {
             writeln!(
@@ -66,7 +53,7 @@ pub fn output_recommendations(
                 info.get_number_of_instantiations()
             )?;
         }
-        let actions = &concrete_info.get_statistics().actions;
+        let actions = &statistics.actions;
         actions.iter().for_each(|action| {
             let action_string = action.compute_talon_script();
             writeln!(buffered_writer, "{}", action_string).unwrap();
