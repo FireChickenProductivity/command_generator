@@ -87,10 +87,6 @@ impl PotentialCommandInformation {
         &mut self.statistics
     }
 
-    pub fn get_actions(&self) -> &Vec<BasicAction> {
-        &self.statistics.actions
-    }
-
     pub fn process_usage(&mut self, command_chain: &CommandChain) {
         if self.should_process_usage(command_chain.get_chain_number()) {
             self.process_relevant_usage(command_chain);

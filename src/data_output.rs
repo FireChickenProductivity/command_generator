@@ -30,7 +30,7 @@ pub fn output_recommendations(
     let mut file_path = compute_data_directory()?;
     file_path.push(file_name);
 
-    let mut file = fs::File::create(file_path)?;
+    let file = fs::File::create(file_path)?;
     let mut buffered_writer = io::BufWriter::new(file);
 
     for recommendation in recommendations {
@@ -66,7 +66,7 @@ pub fn output_recommendations(
                 info.get_number_of_instantiations()
             )?;
         }
-        let actions = concrete_info.get_actions();
+        let actions = &concrete_info.get_statistics().actions;
         actions.iter().for_each(|action| {
             let action_string = action.compute_talon_script();
             writeln!(buffered_writer, "{}", action_string).unwrap();
