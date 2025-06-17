@@ -21,6 +21,7 @@ pub struct CommandStatistics {
     pub number_of_times_used: usize,
     pub number_of_actions: usize,
     pub total_number_of_words_dictated: u32,
+    pub number_of_words_saved: u32,
 }
 
 impl CommandStatistics {
@@ -29,6 +30,7 @@ impl CommandStatistics {
             number_of_times_used: 0,
             number_of_actions: number_of_actions,
             total_number_of_words_dictated: 0,
+            number_of_words_saved: 0,
         }
     }
 
@@ -81,6 +83,10 @@ impl PotentialCommandInformation {
         &self.statistics
     }
 
+    pub fn get_statistics_mut(&mut self) -> &mut CommandStatistics {
+        &mut self.statistics
+    }
+
     pub fn get_actions(&self) -> &Vec<BasicAction> {
         &self.actions
     }
@@ -103,9 +109,10 @@ impl PotentialCommandInformation {
         self.statistics.process_usage(command_chain);
     }
 
-    pub fn get_number_of_words_saved(&self) -> u32 {
-        self.statistics.number_of_times_used as u32
-            * (self.statistics.get_average_words_dictated() as u32 - 1)
+    pub fn compute_number_of_words_saved(&mut self) {
+        let words_saved = self.statistics.number_of_times_used as u32
+            * (self.statistics.get_average_words_dictated() as u32 - 1);
+        self.statistics.number_of_words_saved = words_saved;
     }
 }
 
@@ -158,17 +165,17 @@ pub struct AbstractCommandInstantiation {
 #[derive(Clone)]
 pub struct PotentialAbstractCommandInformation {
     instantiation_set: ActionSet,
-    number_of_words_saved: u32,
     info: PotentialCommandInformation,
 }
 
 impl PotentialAbstractCommandInformation {
     pub fn new(instantiation: AbstractCommandInstantiation) -> Self {
         let actions = instantiation.command_chain.get_command().get_actions();
-        let potential_command_information = PotentialCommandInformation::new(actions.clone());
+        let mut potential_command_information = PotentialCommandInformation::new(actions.clone());
+        let statistics = &mut potential_command_information.get_statistics_mut();
+        statistics.number_of_words_saved = instantiation.words_saved;
         let mut result = Self {
             instantiation_set: ActionSet::new(),
-            number_of_words_saved: instantiation.words_saved,
             info: potential_command_information,
         };
         result.process_usage(instantiation);
@@ -182,16 +189,12 @@ impl PotentialAbstractCommandInformation {
             self.instantiation_set.insert(&actions);
             self.info
                 .process_relevant_usage(&instantiation.command_chain);
-            self.number_of_words_saved += instantiation.words_saved;
+            self.info.get_statistics_mut().number_of_words_saved += instantiation.words_saved;
         }
     }
 
     pub fn get_number_of_instantiations(&self) -> usize {
         self.instantiation_set.get_size()
-    }
-
-    pub fn get_number_of_words_saved(&self) -> u32 {
-        self.number_of_words_saved
     }
 
     pub fn get_instantiation_set(&self) -> &ActionSet {
@@ -572,8 +575,8 @@ pub fn make_abstract_prose_representations_for_command(
     }
 }
 
-fn basic_concrete_command_filter(info: &CommandStatistics, number_of_words_saved: u32) -> bool {
-    number_of_words_saved > 0
+fn basic_concrete_command_filter(info: &CommandStatistics) -> bool {
+    info.number_of_words_saved > 0
         && info.number_of_times_used > 1
         && (info.number_of_actions as f32 / info.get_average_words_dictated() < 2.0
             || info.number_of_actions as f32 * (info.number_of_times_used as f32).sqrt()
@@ -587,14 +590,15 @@ fn basic_abstract_command_filter(info: &PotentialAbstractCommandInformation) -> 
         .get_average_words_dictated()
         < 2.0
         || info.get_number_of_instantiations() <= 2
-        || info.get_number_of_words_saved() < 1
+        || info
+            .get_potential_command_information()
+            .get_statistics()
+            .number_of_words_saved
+            < 1
     {
         return false;
     }
-    basic_concrete_command_filter(
-        info.get_potential_command_information().get_statistics(),
-        info.get_number_of_words_saved(),
-    )
+    basic_concrete_command_filter(info.get_potential_command_information().get_statistics())
 }
 
 fn is_command_after_chain_start_exceeding_time_gap_threshold(
@@ -785,15 +789,13 @@ fn create_commands(record: &[Entry], max_chain_size: u32) -> GeneratedCommands {
             }
         }
     }
+    for info in concrete_commands.values_mut() {
+        info.compute_number_of_words_saved();
+    }
     GeneratedCommands {
         concrete: concrete_commands
             .values()
-            .filter(|info| {
-                basic_concrete_command_filter(
-                    info.get_statistics(),
-                    info.get_number_of_words_saved(),
-                )
-            })
+            .filter(|info| basic_concrete_command_filter(info.get_statistics()))
             .cloned()
             .collect(),
         abs: abstract_commands

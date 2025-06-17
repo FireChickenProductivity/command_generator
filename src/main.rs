@@ -58,6 +58,7 @@ fn main() {
                 "Created {} recommendations.",
                 recommendations.concrete.len() + recommendations.abs.len()
             );
+            return;
             let file_name = format!("recommendations {}.txt", compute_timestamp());
             output_recommendations(&output, &file_name)
                 .unwrap_or_else(|e| println!("Error writing recommendations to file: {}", e));

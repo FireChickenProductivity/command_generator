@@ -38,11 +38,14 @@ pub fn output_recommendations(
 
         let concrete_info = match recommendation {
             Information::Concrete(info) => {
-                number_of_words_saved = info.get_number_of_words_saved();
+                number_of_words_saved = info.get_statistics().number_of_words_saved;
                 info
             }
             Information::Abstract(info) => {
-                number_of_words_saved = info.get_number_of_words_saved();
+                number_of_words_saved = info
+                    .get_potential_command_information()
+                    .get_statistics()
+                    .number_of_words_saved;
                 info.get_potential_command_information()
             }
         };
