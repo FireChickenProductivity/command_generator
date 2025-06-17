@@ -242,23 +242,6 @@ impl PotentialAbstractCommandInformation {
             .unwrap()
             .get_size()
     }
-
-    pub fn get_instantiation_set(&self) -> &ActionSet {
-        &self.statistics.instantiation_set.as_ref().unwrap()
-    }
-}
-
-#[derive(Clone)]
-pub enum Information {
-    Concrete(PotentialCommandInformation),
-    Abstract(PotentialAbstractCommandInformation),
-}
-
-pub fn get_information_statistics(info: &Information) -> &CommandStatistics {
-    match info {
-        Information::Concrete(concrete_info) => concrete_info.get_statistics(),
-        Information::Abstract(abstract_info) => &abstract_info.get_statistics(),
-    }
 }
 
 fn create_repeat_action(repeat_count: i32) -> BasicAction {
