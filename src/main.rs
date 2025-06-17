@@ -47,7 +47,7 @@ fn main() {
         Ok(record) => {
             println!("Generating recommendations");
             let mut recommendations =
-                compute_recommendations_from_record(&record, parameters.max_chain_size);
+                compute_recommendations_from_record(record, parameters.max_chain_size);
             let elapsed_time = start_time.elapsed();
             println!(
                 "Time taken to compute recommendations: {:.3?}",
