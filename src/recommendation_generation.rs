@@ -847,18 +847,8 @@ fn create_commands(record: &[Entry], max_chain_size: u32) -> GeneratedCommands {
     }
 }
 
-pub fn compare_information(a: &Information, b: &Information) -> std::cmp::Ordering {
-    let a_info = match a {
-        Information::Concrete(info) => info.get_statistics(),
-        Information::Abstract(info) => &info.get_statistics(),
-    };
-    let b_info = match b {
-        Information::Concrete(info) => info.get_statistics(),
-        Information::Abstract(info) => &info.get_statistics(),
-    };
-    b_info
-        .number_of_times_used
-        .cmp(&a_info.number_of_times_used)
+pub fn compare_information(a: &CommandStatistics, b: &CommandStatistics) -> std::cmp::Ordering {
+    b.number_of_times_used.cmp(&a.number_of_times_used)
 }
 
 pub struct GeneratedCommands {
@@ -866,20 +856,10 @@ pub struct GeneratedCommands {
     pub abs: Vec<PotentialAbstractCommandInformation>,
 }
 
-pub fn create_sorted_info(commands: &GeneratedCommands) -> Vec<Information> {
+pub fn create_sorted_info(commands: &GeneratedCommands) -> Vec<CommandStatistics> {
     let mut sorted_info = Vec::new();
-    sorted_info.extend(
-        commands
-            .concrete
-            .iter()
-            .map(|info| Information::Concrete(info.clone())),
-    );
-    sorted_info.extend(
-        commands
-            .abs
-            .iter()
-            .map(|info| Information::Abstract(info.clone())),
-    );
+    sorted_info.extend(commands.concrete.iter().map(|info| info.statistics.clone()));
+    sorted_info.extend(commands.abs.iter().map(|info| info.statistics.clone()));
     sorted_info.sort_by(compare_information);
     sorted_info
 }

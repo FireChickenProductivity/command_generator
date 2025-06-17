@@ -24,7 +24,7 @@ pub fn create_data_directory() -> io::Result<()> {
 }
 
 pub fn output_recommendations(
-    recommendations: &[Information],
+    recommendations: &[CommandStatistics],
     file_name: &str,
 ) -> std::io::Result<()> {
     let mut file_path = compute_data_directory()?;
@@ -33,9 +33,7 @@ pub fn output_recommendations(
     let file = fs::File::create(file_path)?;
     let mut buffered_writer = io::BufWriter::new(file);
 
-    for recommendation in recommendations {
-        let statistics = get_information_statistics(recommendation);
-
+    for statistics in recommendations {
         writeln!(
             buffered_writer,
             "#Number of times used: {}",
@@ -46,11 +44,11 @@ pub fn output_recommendations(
             "#Number of words saved: {}",
             statistics.number_of_words_saved
         )?;
-        if let Information::Abstract(info) = recommendation {
+        if let Some(instantiation_set) = &statistics.instantiation_set {
             writeln!(
                 buffered_writer,
                 "Number of instantiations of abstract command: {}",
-                info.get_number_of_instantiations()
+                instantiation_set.get_size()
             )?;
         }
         let actions = &statistics.actions;
