@@ -20,6 +20,7 @@ fn compute_number_of_words(command_chain: &CommandChain) -> u32 {
 pub struct CommandStatistics {
     pub number_of_times_used: usize,
     pub number_of_actions: usize,
+    pub total_number_of_words_dictated: u32,
 }
 
 impl CommandStatistics {
@@ -27,6 +28,7 @@ impl CommandStatistics {
         CommandStatistics {
             number_of_times_used: 0,
             number_of_actions: number_of_actions,
+            total_number_of_words_dictated: 0,
         }
     }
 }
@@ -35,7 +37,6 @@ impl CommandStatistics {
 pub struct PotentialCommandInformation {
     actions: Vec<BasicAction>,
     statistics: CommandStatistics,
-    total_number_of_words_dictated: u32,
     chain: Option<usize>,
 }
 
@@ -60,7 +61,6 @@ impl PotentialCommandInformation {
         PotentialCommandInformation {
             actions,
             statistics: CommandStatistics::new(number_of_actions),
-            total_number_of_words_dictated: 0,
             chain: None,
         }
     }
@@ -73,7 +73,8 @@ impl PotentialCommandInformation {
         if self.statistics.number_of_times_used == 0 {
             return 0.0;
         }
-        self.total_number_of_words_dictated as f32 / self.statistics.number_of_times_used as f32
+        self.statistics.total_number_of_words_dictated as f32
+            / self.statistics.number_of_times_used as f32
     }
 
     pub fn get_number_of_times_used(&self) -> usize {
@@ -100,7 +101,7 @@ impl PotentialCommandInformation {
     fn process_relevant_usage(&mut self, command_chain: &CommandChain) {
         self.statistics.number_of_times_used += 1;
         self.chain = Some(command_chain.get_chain_ending_index());
-        self.total_number_of_words_dictated += compute_number_of_words(command_chain);
+        self.statistics.total_number_of_words_dictated += compute_number_of_words(command_chain);
     }
 
     pub fn get_number_of_words_saved(&self) -> u32 {
