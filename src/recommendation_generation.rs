@@ -19,12 +19,14 @@ fn compute_number_of_words(command_chain: &CommandChain) -> u32 {
 #[derive(Clone, Debug)]
 pub struct CommandStatistics {
     pub number_of_times_used: usize,
+    pub number_of_actions: usize,
 }
 
 impl CommandStatistics {
-    pub fn new() -> Self {
+    pub fn new(number_of_actions: usize) -> Self {
         CommandStatistics {
             number_of_times_used: 0,
+            number_of_actions: number_of_actions,
         }
     }
 }
@@ -34,7 +36,6 @@ pub struct PotentialCommandInformation {
     actions: Vec<BasicAction>,
     statistics: CommandStatistics,
     total_number_of_words_dictated: u32,
-    number_of_actions: usize,
     chain: Option<usize>,
 }
 
@@ -55,17 +56,17 @@ fn compute_number_of_actions(actions: &Vec<BasicAction>) -> usize {
 
 impl PotentialCommandInformation {
     pub fn new(actions: Vec<BasicAction>) -> Self {
+        let number_of_actions = compute_number_of_actions(&actions);
         PotentialCommandInformation {
             actions,
-            statistics: CommandStatistics::new(),
+            statistics: CommandStatistics::new(number_of_actions),
             total_number_of_words_dictated: 0,
-            number_of_actions: 0,
             chain: None,
         }
     }
 
     pub fn get_number_of_actions(&self) -> usize {
-        self.number_of_actions
+        self.statistics.number_of_actions
     }
 
     pub fn get_average_words_dictated(&self) -> f32 {
