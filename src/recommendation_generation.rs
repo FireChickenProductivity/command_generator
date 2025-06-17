@@ -72,16 +72,8 @@ impl PotentialCommandInformation {
         }
     }
 
-    pub fn get_number_of_actions(&self) -> usize {
-        self.statistics.number_of_actions
-    }
-
-    pub fn get_average_words_dictated(&self) -> f32 {
-        self.statistics.get_average_words_dictated()
-    }
-
-    pub fn get_number_of_times_used(&self) -> usize {
-        self.statistics.number_of_times_used
+    pub fn get_statistics(&self) -> &CommandStatistics {
+        &self.statistics
     }
 
     pub fn get_actions(&self) -> &Vec<BasicAction> {
@@ -108,7 +100,8 @@ impl PotentialCommandInformation {
     }
 
     pub fn get_number_of_words_saved(&self) -> u32 {
-        self.get_number_of_times_used() as u32 * (self.get_average_words_dictated() as u32 - 1)
+        self.statistics.number_of_times_used as u32
+            * (self.statistics.get_average_words_dictated() as u32 - 1)
     }
 }
 
@@ -575,18 +568,18 @@ pub fn make_abstract_prose_representations_for_command(
     }
 }
 
-fn basic_concrete_command_filter(info: &PotentialCommandInformation) -> bool {
-    info.get_number_of_words_saved() > 0
-        && info.get_number_of_times_used() > 1
-        && (info.get_number_of_actions() as f32 / info.get_average_words_dictated() < 2.0
-            || info.get_number_of_actions() as f32
-                * (info.get_number_of_times_used() as f32).sqrt()
+fn basic_concrete_command_filter(info: &CommandStatistics, number_of_words_saved: u32) -> bool {
+    number_of_words_saved > 0
+        && info.number_of_times_used > 1
+        && (info.number_of_actions as f32 / info.get_average_words_dictated() < 2.0
+            || info.number_of_actions as f32 * (info.number_of_times_used as f32).sqrt()
                 > info.get_average_words_dictated())
 }
 
 fn basic_abstract_command_filter(info: &PotentialAbstractCommandInformation) -> bool {
     if info
         .get_potential_command_information()
+        .get_statistics()
         .get_average_words_dictated()
         < 2.0
         || info.get_number_of_instantiations() <= 2
@@ -594,7 +587,10 @@ fn basic_abstract_command_filter(info: &PotentialAbstractCommandInformation) -> 
     {
         return false;
     }
-    basic_concrete_command_filter(info.get_potential_command_information())
+    basic_concrete_command_filter(
+        info.get_potential_command_information().get_statistics(),
+        info.get_number_of_words_saved(),
+    )
 }
 
 fn is_command_after_chain_start_exceeding_time_gap_threshold(
@@ -788,7 +784,12 @@ fn create_commands(record: &[Entry], max_chain_size: u32) -> GeneratedCommands {
     GeneratedCommands {
         concrete: concrete_commands
             .values()
-            .filter(|info| basic_concrete_command_filter(info))
+            .filter(|info| {
+                basic_concrete_command_filter(
+                    info.get_statistics(),
+                    info.get_number_of_words_saved(),
+                )
+            })
             .cloned()
             .collect(),
         abs: abstract_commands
@@ -801,16 +802,16 @@ fn create_commands(record: &[Entry], max_chain_size: u32) -> GeneratedCommands {
 
 pub fn compare_information(a: &Information, b: &Information) -> std::cmp::Ordering {
     let a_info = match a {
-        Information::Concrete(info) => info,
-        Information::Abstract(info) => &info.get_potential_command_information(),
+        Information::Concrete(info) => info.get_statistics(),
+        Information::Abstract(info) => &info.get_potential_command_information().get_statistics(),
     };
     let b_info = match b {
-        Information::Concrete(info) => info,
-        Information::Abstract(info) => &info.get_potential_command_information(),
+        Information::Concrete(info) => info.get_statistics(),
+        Information::Abstract(info) => &info.get_potential_command_information().get_statistics(),
     };
     b_info
-        .get_number_of_times_used()
-        .cmp(&a_info.get_number_of_times_used())
+        .number_of_times_used
+        .cmp(&a_info.number_of_times_used)
 }
 
 pub struct GeneratedCommands {
