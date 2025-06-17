@@ -51,9 +51,31 @@ impl CommandStatistics {
 }
 
 #[derive(Clone)]
+struct ChainHandler {
+    chain: Option<usize>,
+}
+
+impl ChainHandler {
+    pub fn new() -> Self {
+        ChainHandler { chain: None }
+    }
+
+    pub fn should_process_usage(&self, chain: usize) -> bool {
+        match self.chain {
+            Some(existing_chain) => existing_chain < chain,
+            None => true,
+        }
+    }
+
+    pub fn process_relevant_usage(&mut self, command_chain: &CommandChain) {
+        self.chain = Some(command_chain.get_chain_ending_index());
+    }
+}
+
+#[derive(Clone)]
 pub struct PotentialCommandInformation {
     statistics: CommandStatistics,
-    chain: Option<usize>,
+    chain_handler: ChainHandler,
 }
 
 fn compute_number_of_actions(actions: &Vec<BasicAction>) -> usize {
@@ -75,7 +97,7 @@ impl PotentialCommandInformation {
     pub fn new(actions: Vec<BasicAction>) -> Self {
         PotentialCommandInformation {
             statistics: CommandStatistics::new(actions),
-            chain: None,
+            chain_handler: ChainHandler::new(),
         }
     }
 
@@ -87,21 +109,21 @@ impl PotentialCommandInformation {
         &mut self.statistics
     }
 
+    pub fn should_process_usage(&self, chain_number: usize) -> bool {
+        self.chain_handler.should_process_usage(chain_number)
+    }
+
     pub fn process_usage(&mut self, command_chain: &CommandChain) {
-        if self.should_process_usage(command_chain.get_chain_number()) {
+        if self
+            .chain_handler
+            .should_process_usage(command_chain.get_chain_number())
+        {
             self.process_relevant_usage(command_chain);
         }
     }
 
-    fn should_process_usage(&self, chain: usize) -> bool {
-        match self.chain {
-            Some(existing_chain) => existing_chain < chain,
-            None => true,
-        }
-    }
-
     fn process_relevant_usage(&mut self, command_chain: &CommandChain) {
-        self.chain = Some(command_chain.get_chain_ending_index());
+        self.chain_handler.process_relevant_usage(command_chain);
         self.statistics.process_usage(command_chain);
     }
 
