@@ -34,7 +34,7 @@ fn print_record(record: Result<Vec<Entry>, String>) {
 
 fn find_best(
     recommendations: &Vec<recommendation_generation::CommandStatistics>,
-    number_of_recommendations: u32,
+    number_of_recommendations: usize,
 ) -> Vec<recommendation_generation::CommandStatistics> {
     println!(
         "Finding the best {} recommendations.",

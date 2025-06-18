@@ -784,13 +784,13 @@ fn create_insert_action_iterator(
         })
 }
 
-fn create_commands(record: Vec<Entry>, max_chain_size: u32) -> Vec<CommandStatistics> {
+fn create_commands(record: Vec<Entry>, max_chain_size: usize) -> Vec<CommandStatistics> {
     let mut concrete_commands = HashMap::new();
     let mut abstract_commands = HashMap::new();
     // let pool = pool::ThreadPool::create_with_max_threads();
     for chain in 0..record.len() {
         println!("Processing chain {}/{}", chain + 1, record.len());
-        let target = record.len().min(chain + max_chain_size as usize);
+        let target = record.len().min(chain + max_chain_size);
         let mut command_chain = CommandChain::empty(chain);
         for chain_ending_index in chain..target {
             if should_command_chain_not_cross_entry_at_record_index(
@@ -846,7 +846,7 @@ pub fn create_sorted_info(commands: &mut Vec<CommandStatistics>) {
 
 pub fn compute_recommendations_from_record(
     record: Vec<Entry>,
-    max_chain_size: u32,
+    max_chain_size: usize,
 ) -> Vec<CommandStatistics> {
     let recommendations = create_commands(record, max_chain_size);
     recommendations
