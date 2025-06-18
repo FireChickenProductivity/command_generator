@@ -1,3 +1,4 @@
+use crate::action_records::{Argument, BasicAction};
 use crate::action_utilities::*;
 use crate::recommendation_generation::CommandStatistics;
 use std::{collections::HashMap, collections::HashSet};
@@ -143,4 +144,51 @@ pub fn find_best(
         return recommendations.clone();
     }
     compute_greedy_best(recommendations, max_number_of_recommendations)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_can_find_greedy_best() {
+        let recommendations = vec![
+            CommandStatistics {
+                number_of_times_used: 50,
+                number_of_words_saved: 1000,
+                instantiation_set: None,
+                actions: vec![create_insert_action("arbitrary")],
+                number_of_actions: 1,
+                total_number_of_words_dictated: 100,
+            },
+            CommandStatistics {
+                number_of_times_used: 20,
+                number_of_words_saved: 40,
+                instantiation_set: None,
+                actions: vec![create_insert_action("test")],
+                number_of_actions: 1,
+                total_number_of_words_dictated: 20,
+            },
+            CommandStatistics {
+                number_of_times_used: 5000,
+                number_of_words_saved: 20000,
+                instantiation_set: None,
+                actions: vec![create_insert_action("mod tests {\n]")],
+                number_of_actions: 1,
+                total_number_of_words_dictated: 400,
+            },
+            CommandStatistics {
+                number_of_times_used: 20,
+                number_of_words_saved: 30,
+                instantiation_set: None,
+                actions: vec![create_insert_action("test2")],
+                number_of_actions: 1,
+                total_number_of_words_dictated: 20,
+            },
+        ];
+        let best = find_best(&recommendations, 2);
+        assert_eq!(best.len(), 2);
+        assert_eq!(best[0].actions, recommendations[2].actions);
+        assert_eq!(best[1].actions, recommendations[0].actions);
+    }
 }
