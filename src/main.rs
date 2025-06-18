@@ -32,6 +32,24 @@ fn print_record(record: Result<Vec<Entry>, String>) {
     }
 }
 
+fn find_best(
+    recommendations: &Vec<recommendation_generation::CommandStatistics>,
+    number_of_recommendations: u32,
+) -> Vec<recommendation_generation::CommandStatistics> {
+    println!(
+        "Finding the best {} recommendations.",
+        number_of_recommendations
+    );
+    let start_time = Instant::now();
+    let recommendations =
+        recommendation_scoring::find_best(&recommendations, number_of_recommendations as usize);
+    println!(
+        "Time taken to find best recommendations: {:.3?}",
+        start_time.elapsed()
+    );
+    recommendations
+}
+
 fn main() {
     match create_data_directory() {
         Ok(_) => {}
@@ -55,7 +73,9 @@ fn main() {
                 elapsed_time
             );
             println!("Created {} recommendations.", recommendations.len());
-            return;
+            if parameters.number_of_recommendations > 0 {
+                recommendations = find_best(&recommendations, parameters.number_of_recommendations);
+            }
             create_sorted_info(&mut recommendations);
             let file_name = format!("recommendations {}.txt", compute_timestamp());
             output_recommendations(&recommendations, &file_name)
