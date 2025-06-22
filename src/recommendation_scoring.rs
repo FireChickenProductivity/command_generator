@@ -116,22 +116,25 @@ fn compute_greedy_best(
     // Finds the best recommendations by for every n-th recommendation
     // finding the recommendation that has the best score with the ones chosen so far
     let mut best_recommendations = Vec::new();
-    let mut remaining_recommendations = recommendations.clone();
+    let mut consumed_indexes = HashSet::new();
     while best_recommendations.len() < max_number_of_recommendations
-        && !remaining_recommendations.is_empty()
+        && best_recommendations.len() < recommendations.len()
     {
         let mut best_score = f64::NEG_INFINITY;
         let mut best_index = 0;
-        for (index, recommendation) in remaining_recommendations.iter().enumerate() {
-            best_recommendations.push(recommendation.clone());
-            let score = compute_heuristic_recommendation_score(&best_recommendations);
-            if score > best_score {
-                best_score = score;
-                best_index = index;
+        for (index, recommendation) in recommendations.iter().enumerate() {
+            if !consumed_indexes.contains(&index) {
+                best_recommendations.push(recommendation.clone());
+                let score = compute_heuristic_recommendation_score(&best_recommendations);
+                if score > best_score {
+                    best_score = score;
+                    best_index = index;
+                }
+                best_recommendations.pop();
             }
-            best_recommendations.pop();
         }
-        best_recommendations.push(remaining_recommendations.remove(best_index));
+        best_recommendations.push(recommendations[best_index].clone());
+        consumed_indexes.insert(best_index);
     }
     best_recommendations
 }
