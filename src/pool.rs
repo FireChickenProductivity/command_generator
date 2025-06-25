@@ -98,4 +98,29 @@ impl<JobResult: Send + 'static> ThreadPool<JobResult> {
         self.job_number = 0;
         results.into_iter().map(|r| r.unwrap()).collect()
     }
+
+    pub fn reduce(
+        &mut self,
+        f: impl Fn(JobResult, JobResult) -> JobResult + Send + 'static,
+    ) -> JobResult {
+        let mut result: Option<JobResult> = None;
+        let mut received = 0;
+        while let Ok((_, value)) = self.receiver.recv() {
+            if let Some(current_result) = result {
+                result = Some(f(current_result, value));
+            } else {
+                result = Some(value);
+            }
+            received += 1;
+            if received == self.job_number {
+                break;
+            }
+        }
+        self.job_number = 0;
+        result.expect("No jobs were executed")
+    }
+
+    pub fn compute_number_of_workers(&self) -> usize {
+        self.workers.len()
+    }
 }

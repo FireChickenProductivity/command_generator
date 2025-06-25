@@ -1,6 +1,8 @@
 use crate::action_records::{Argument, BasicAction};
 use crate::action_utilities::*;
+use crate::pool;
 use crate::recommendation_generation::CommandStatistics;
+use std::sync::Arc;
 use std::{collections::HashMap, collections::HashSet};
 
 fn compute_number_of_commands_including_action(
@@ -109,6 +111,59 @@ fn compute_heuristic_recommendation_score(recommendations: &Vec<CommandStatistic
     )
 }
 
+fn compute_greedy_best_in_parallel(
+    recommendations: &Vec<CommandStatistics>,
+    max_number_of_recommendations: usize,
+) -> Vec<CommandStatistics> {
+    let mut pool: pool::ThreadPool<(usize, f64)> = pool::ThreadPool::create_with_max_threads();
+    let mut best_recommendations = Vec::new();
+    let mut consumed_indexes = HashSet::new();
+    while best_recommendations.len() < max_number_of_recommendations
+        && best_recommendations.len() < recommendations.len()
+    {
+        let num_workers = pool.compute_number_of_workers();
+        let mut starting_index = 0;
+        let chunk_size = recommendations.len() / num_workers;
+        let consumed_arc = Arc::new(consumed_indexes.clone());
+        for _worker in 0..num_workers {
+            let target_index = recommendations.len().min(starting_index + chunk_size);
+            let start = starting_index;
+            let recommendations_clone = recommendations[starting_index..target_index].to_vec();
+            let consumed_clone = Arc::clone(&consumed_arc);
+            let best_recommendations_clone = best_recommendations.clone();
+            pool.execute(move || {
+                let mut best_score = f64::NEG_INFINITY;
+                let mut best_index = 0;
+                let mut i = 0;
+                for recommendation in recommendations_clone.iter() {
+                    let mut current_recommendations = best_recommendations_clone.clone();
+                    if !consumed_clone.contains(&(i + start)) {
+                        current_recommendations.push(recommendation.clone());
+                        let score =
+                            compute_heuristic_recommendation_score(&current_recommendations);
+                        if score > best_score {
+                            best_score = score;
+                            best_index = i + start;
+                        }
+                        current_recommendations.pop();
+                    }
+                    i += 1;
+                }
+                (best_index, best_score)
+            });
+            starting_index = target_index;
+        }
+        let (best_index, _best_score) = pool.reduce(|a, b| if a.1 > b.1 { a } else { b });
+        best_recommendations.push(recommendations[best_index].clone());
+        consumed_indexes.insert(best_index);
+    }
+    let result = best_recommendations
+        .iter()
+        .cloned()
+        .collect::<Vec<CommandStatistics>>();
+    result
+}
+
 fn compute_greedy_best(
     recommendations: &Vec<CommandStatistics>,
     max_number_of_recommendations: usize,
@@ -146,7 +201,7 @@ pub fn find_best(
     if max_number_of_recommendations >= recommendations.len() {
         return recommendations.clone();
     }
-    compute_greedy_best(recommendations, max_number_of_recommendations)
+    compute_greedy_best_in_parallel(recommendations, max_number_of_recommendations)
 }
 
 #[cfg(test)]

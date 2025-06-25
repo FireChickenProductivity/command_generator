@@ -73,7 +73,6 @@ fn main() {
                 elapsed_time
             );
             println!("Created {} recommendations.", recommendations.len());
-            return;
             if parameters.number_of_recommendations > 0 {
                 recommendations = find_best(&recommendations, parameters.number_of_recommendations);
             }

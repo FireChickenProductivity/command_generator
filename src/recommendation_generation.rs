@@ -7,7 +7,7 @@ use crate::text_separation::{
     TextSeparationAnalyzer, compute_case_string_for_prose, has_valid_case,
 };
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 fn compute_number_of_words(command_chain: &CommandChain) -> u32 {
     command_chain
