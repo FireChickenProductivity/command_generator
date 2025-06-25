@@ -76,7 +76,6 @@ impl<JobResult: Send + 'static> ThreadPool<JobResult> {
     }
 
     pub fn join(&mut self) -> Vec<JobResult> {
-        // I need a mechanism for knowing when all jobs are done
         let mut results: Vec<Option<JobResult>> = Vec::with_capacity(self.job_number);
         results.resize_with(self.job_number, || None);
         let mut received = 0;
