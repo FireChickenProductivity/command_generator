@@ -118,6 +118,8 @@ fn compute_greedy_best_in_parallel(
     let mut pool: pool::ThreadPool<(usize, f64)> = pool::ThreadPool::create_with_max_threads();
     let mut best_recommendations = Vec::new();
     let mut consumed_indexes = HashSet::new();
+    let recommendations = recommendations.clone();
+    let recommendations = Arc::new(recommendations);
     while best_recommendations.len() < max_number_of_recommendations
         && best_recommendations.len() < recommendations.len()
     {
@@ -128,26 +130,25 @@ fn compute_greedy_best_in_parallel(
         for _worker in 0..num_workers {
             let target_index = recommendations.len().min(starting_index + chunk_size);
             let start = starting_index;
-            let recommendations_clone = recommendations[starting_index..target_index].to_vec();
+            let recommendations_clone = Arc::clone(&recommendations);
             let consumed_clone = Arc::clone(&consumed_arc);
             let best_recommendations_clone = best_recommendations.clone();
             pool.execute(move || {
                 let mut best_score = f64::NEG_INFINITY;
                 let mut best_index = 0;
-                let mut i = 0;
-                for recommendation in recommendations_clone.iter() {
+                for i in start..target_index {
                     let mut current_recommendations = best_recommendations_clone.clone();
-                    if !consumed_clone.contains(&(i + start)) {
+                    if !consumed_clone.contains(&i) {
+                        let recommendation = &recommendations_clone[i];
                         current_recommendations.push(recommendation.clone());
                         let score =
                             compute_heuristic_recommendation_score(&current_recommendations);
                         if score > best_score {
                             best_score = score;
-                            best_index = i + start;
+                            best_index = i;
                         }
                         current_recommendations.pop();
                     }
-                    i += 1;
                 }
                 (best_index, best_score)
             });
