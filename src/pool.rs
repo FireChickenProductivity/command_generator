@@ -23,9 +23,15 @@ impl Worker {
     {
         let thread = thread::spawn(move || {
             loop {
-                let (number, job) = receiver.lock().unwrap().recv().unwrap();
-                let result: JobResult = job();
-                result_sender.send((number, result)).unwrap();
+                let unlocked_receiver = receiver.lock().unwrap();
+                if let Ok((number, job)) = unlocked_receiver.recv() {
+                    // The thread must let go of the lock before starting the job or else the work will essentially become single threaded
+                    drop(unlocked_receiver);
+                    let result: JobResult = job();
+                    result_sender.send((number, result)).unwrap();
+                } else {
+                    break;
+                }
             }
         });
         Self { id, thread }
