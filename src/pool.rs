@@ -76,6 +76,9 @@ impl<JobResult: Send + 'static> ThreadPool<JobResult> {
     }
 
     pub fn join(&mut self) -> Vec<JobResult> {
+        if self.job_number == 0 {
+            return Vec::new();
+        }
         let mut results: Vec<Option<JobResult>> = Vec::with_capacity(self.job_number);
         results.resize_with(self.job_number, || None);
         let mut received = 0;

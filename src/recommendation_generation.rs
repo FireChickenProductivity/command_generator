@@ -7,6 +7,7 @@ use crate::text_separation::{
     TextSeparationAnalyzer, compute_case_string_for_prose, has_valid_case,
 };
 use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, Mutex};
 
 fn compute_number_of_words(command_chain: &CommandChain) -> u32 {
     command_chain
@@ -693,9 +694,8 @@ pub fn create_abstract_commands(command_chain: &CommandChain) -> Vec<AbstractCom
 fn process_abstract_command_usage(
     abstract_commands: &mut HashMap<String, PotentialAbstractCommandInformation>,
     instantiation: AbstractCommandInstantiation,
+    representation: String,
 ) {
-    let representation =
-        compute_string_representation_of_chain_actions(&instantiation.command_chain);
     if let Some(info) = abstract_commands.get_mut(&representation) {
         info.process_usage(instantiation);
     } else {
@@ -712,15 +712,17 @@ pub fn handle_needed_abstract_commands(
 ) {
     let abstractions = create_abstract_commands(command_chain);
     for abstract_command in abstractions {
-        process_abstract_command_usage(abstract_commands, abstract_command);
+        let representation =
+            compute_string_representation_of_chain_actions(&abstract_command.command_chain);
+        process_abstract_command_usage(abstract_commands, abstract_command, representation);
     }
 }
 
 fn process_concrete_command_usage(
     concrete_commands: &mut HashMap<String, PotentialCommandInformation>,
     command_chain: &CommandChain,
+    representation: String,
 ) {
-    let representation = compute_string_representation_of_chain_actions(command_chain);
     if let Some(info) = concrete_commands.get_mut(&representation) {
         info.process_usage(command_chain);
     } else {
@@ -753,7 +755,14 @@ fn process_insert_action(
                     insert.index,
                 );
                 if is_acceptable_abstract_representation(&abstract_representation.command_chain) {
-                    process_abstract_command_usage(abstract_commands, abstract_representation);
+                    let representation = compute_string_representation_of_chain_actions(
+                        &abstract_representation.command_chain,
+                    );
+                    process_abstract_command_usage(
+                        abstract_commands,
+                        abstract_representation,
+                        representation,
+                    );
                 }
             } else {
                 break;
@@ -784,38 +793,106 @@ fn create_insert_action_iterator(
         })
 }
 
+fn do_asynchronous_chain_work(
+    start_index: usize,
+    ending_index: usize,
+    record: Arc<Vec<Entry>>,
+) -> (
+    CommandChain,
+    String,
+    Vec<AbstractCommandInstantiation>,
+    Vec<String>,
+) {
+    let mut concrete_chain = CommandChain::empty(start_index);
+    for _index in start_index..=ending_index {
+        add_next_record_command_to_chain(&record, &mut concrete_chain);
+    }
+    let simplified_command_chain = simplify_command_chain(&concrete_chain);
+    let abstract_commands = create_abstract_commands(&simplified_command_chain);
+    let abstract_representations = abstract_commands
+        .iter()
+        .map(|a| compute_string_representation_of_chain_actions(&a.command_chain))
+        .collect();
+    let concrete_representation =
+        compute_string_representation_of_chain_actions(&simplified_command_chain);
+    (
+        simplified_command_chain,
+        concrete_representation,
+        abstract_commands,
+        abstract_representations,
+    )
+}
+
+fn compute_chain_size(record: &Arc<Vec<Entry>>, chain: usize, chain_target: usize) -> usize {
+    let mut num_targets = 0;
+    for chain_ending_index in chain..chain_target {
+        if should_command_chain_not_cross_entry_at_record_index(record, chain, chain_ending_index) {
+            break;
+        }
+        num_targets += 1;
+    }
+    num_targets
+}
+
 fn create_commands(record: Vec<Entry>, max_chain_size: usize) -> Vec<CommandStatistics> {
-    let mut concrete_commands = HashMap::new();
-    let mut abstract_commands = HashMap::new();
-    // let pool = pool::ThreadPool::create_with_max_threads();
+    let record = Arc::new(record);
+    let mut concrete_commands: HashMap<String, PotentialCommandInformation> = HashMap::new();
+    let mut abstract_commands: HashMap<String, PotentialAbstractCommandInformation> =
+        HashMap::new();
+    let mut pool: pool::ThreadPool<(
+        CommandChain,
+        String,
+        Vec<AbstractCommandInstantiation>,
+        Vec<String>,
+    )> = pool::ThreadPool::create_with_max_threads();
+    let record_length = record.len();
     for chain in 0..record.len() {
-        println!("Processing chain {}/{}", chain + 1, record.len());
-        let target = record.len().min(chain + max_chain_size);
-        let mut command_chain = CommandChain::empty(chain);
-        for chain_ending_index in chain..target {
-            if should_command_chain_not_cross_entry_at_record_index(
-                &record,
-                chain,
-                chain_ending_index,
-            ) {
-                break;
-            }
-            add_next_record_command_to_chain(&record, &mut command_chain);
-            let simplified_command_chain = simplify_command_chain(&command_chain);
-            process_concrete_command_usage(&mut concrete_commands, &simplified_command_chain);
-            let insert_iterator = create_insert_action_iterator(&simplified_command_chain);
-            insert_iterator.for_each(|insert| {
-                process_insert_action(&simplified_command_chain, &insert, &mut abstract_commands);
+        println!("Processing chain {}/{}", chain + 1, record_length);
+        let chain_size =
+            compute_chain_size(&record, chain, record_length.min(chain + max_chain_size));
+        for chain_ending_index in chain..chain + chain_size {
+            let record_clone = Arc::clone(&record);
+            pool.execute(move || {
+                do_asynchronous_chain_work(chain, chain_ending_index, record_clone)
             });
-            if should_make_abstract_repeat_representation(&simplified_command_chain) {
-                let abstract_repeat_representation =
-                    make_abstract_repeat_representation_for(&simplified_command_chain);
+        }
+        let results = pool.join();
+        for (
+            concrete_chain,
+            concrete_representation,
+            mut abstractions,
+            mut abstract_representations,
+        ) in results
+        {
+            process_concrete_command_usage(
+                &mut concrete_commands,
+                &concrete_chain,
+                concrete_representation,
+            );
+            while !abstractions.is_empty() {
+                let index = abstractions.len() - 1;
+                let instantiation = abstractions.remove(index);
+                let representation = abstract_representations.remove(index);
                 process_abstract_command_usage(
                     &mut abstract_commands,
-                    abstract_repeat_representation,
+                    instantiation,
+                    representation,
                 );
             }
         }
+
+        // let insert_iterator = create_insert_action_iterator(&simplified_command_chain);
+        // insert_iterator.for_each(|insert| {
+        //     process_insert_action(&simplified_command_chain, &insert, &mut abstract_commands);
+        // });
+        // if should_make_abstract_repeat_representation(&simplified_command_chain) {
+        //     let abstract_repeat_representation =
+        //         make_abstract_repeat_representation_for(&simplified_command_chain);
+        //     process_abstract_command_usage(
+        //         &mut abstract_commands,
+        //         abstract_repeat_representation,
+        //     );
+        // }
     }
     for info in concrete_commands.values_mut() {
         info.compute_number_of_words_saved();
