@@ -127,7 +127,7 @@ fn compute_greedy_best_in_parallel(
         let mut starting_index = 0;
         let chunk_size = recommendations.len() / num_workers;
         let consumed_arc = Arc::new(consumed_indexes.clone());
-        for _worker in 0..num_workers {
+        for _ in 0..num_workers {
             let target_index = recommendations.len().min(starting_index + chunk_size);
             let start = starting_index;
             let recommendations_clone = Arc::clone(&recommendations);
@@ -158,11 +158,7 @@ fn compute_greedy_best_in_parallel(
         best_recommendations.push(recommendations[best_index].clone());
         consumed_indexes.insert(best_index);
     }
-    let result = best_recommendations
-        .iter()
-        .cloned()
-        .collect::<Vec<CommandStatistics>>();
-    result
+    best_recommendations
 }
 
 fn compute_greedy_best(

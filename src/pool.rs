@@ -8,13 +8,11 @@ use std::{
 type Job<JobResult> = Box<dyn FnOnce() -> JobResult + Send + 'static>;
 
 struct Worker {
-    id: usize,
     thread: thread::JoinHandle<()>,
 }
 
 impl Worker {
     fn new<JobResult>(
-        id: usize,
         receiver: Arc<Mutex<mpsc::Receiver<(usize, Job<JobResult>)>>>,
         result_sender: mpsc::Sender<(usize, JobResult)>,
     ) -> Self
@@ -34,7 +32,7 @@ impl Worker {
                 }
             }
         });
-        Self { id, thread }
+        Self { thread }
     }
 }
 
@@ -52,12 +50,8 @@ impl<JobResult: Send + 'static> ThreadPool<JobResult> {
         let receiver = Arc::new(Mutex::new(receiver));
         let (result_sender, result_receiver) = mpsc::channel();
 
-        for id in 0..size {
-            workers.push(Worker::new(
-                id,
-                Arc::clone(&receiver),
-                result_sender.clone(),
-            ));
+        for _ in 0..size {
+            workers.push(Worker::new(Arc::clone(&receiver), result_sender.clone()));
         }
         Self {
             workers,
