@@ -15,17 +15,17 @@ struct Worker {
 impl Worker {
     fn new<JobResult>(
         id: usize,
-        receiver: Arc<Mutex<mpsc::Receiver<Job<JobResult>>>>,
-        result_sender: mpsc::Sender<JobResult>,
+        receiver: Arc<Mutex<mpsc::Receiver<(usize, Job<JobResult>)>>>,
+        result_sender: mpsc::Sender<(usize, JobResult)>,
     ) -> Self
     where
         JobResult: Send + 'static,
     {
         let thread = thread::spawn(move || {
             loop {
-                let job = receiver.lock().unwrap().recv().unwrap();
+                let (number, job) = receiver.lock().unwrap().recv().unwrap();
                 let result: JobResult = job();
-                result_sender.send(result).unwrap();
+                result_sender.send((number, result)).unwrap();
             }
         });
         Self { id, thread }
@@ -34,8 +34,9 @@ impl Worker {
 
 pub struct ThreadPool<JobResult> {
     workers: Vec<Worker>,
-    sender: mpsc::Sender<Job<JobResult>>,
-    receiver: mpsc::Receiver<JobResult>,
+    sender: mpsc::Sender<(usize, Job<JobResult>)>,
+    receiver: mpsc::Receiver<(usize, JobResult)>,
+    job_number: usize,
 }
 
 impl<JobResult: Send + 'static> ThreadPool<JobResult> {
@@ -56,6 +57,7 @@ impl<JobResult: Send + 'static> ThreadPool<JobResult> {
             workers,
             sender,
             receiver: result_receiver,
+            job_number: 0,
         }
     }
 
@@ -64,20 +66,28 @@ impl<JobResult: Send + 'static> ThreadPool<JobResult> {
         Self::new(size)
     }
 
-    pub fn execute<F>(&self, f: F)
+    pub fn execute<F>(&mut self, f: F)
     where
         F: FnOnce() -> JobResult + Send + 'static,
     {
         let job = Box::new(f);
-        self.sender.send(job).unwrap();
+        self.sender.send((self.job_number, job)).unwrap();
+        self.job_number += 1;
     }
 
-    pub fn join(&self) -> Vec<JobResult> {
+    pub fn join(&mut self) -> Vec<JobResult> {
         // I need a mechanism for knowing when all jobs are done
-        let mut results = Vec::new();
-        while let Ok(value) = self.receiver.recv() {
-            results.push(value);
+        let mut results: Vec<Option<JobResult>> = Vec::with_capacity(self.job_number);
+        results.resize_with(self.job_number, || None);
+        let mut received = 0;
+        while let Ok((number, value)) = self.receiver.recv() {
+            results[number] = Some(value);
+            received += 1;
+            if received == self.job_number {
+                break;
+            }
         }
-        results
+        self.job_number = 0;
+        results.into_iter().map(|r| r.unwrap()).collect()
     }
 }
