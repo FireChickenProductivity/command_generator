@@ -136,8 +136,8 @@ fn compute_greedy_best_in_parallel(
             pool.execute(move || {
                 let mut best_score = f64::NEG_INFINITY;
                 let mut best_index = 0;
+                let mut current_recommendations = best_recommendations_clone.clone();
                 for i in start..target_index {
-                    let mut current_recommendations = best_recommendations_clone.clone();
                     if !consumed_clone.contains(&i) {
                         let recommendation = &recommendations_clone[i];
                         current_recommendations.push(recommendation.clone());
