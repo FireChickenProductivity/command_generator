@@ -324,15 +324,14 @@ fn filter_out_recommendations_redundant_smaller_commands(
             find_redundant_commands_from_command(sequence, &action_sequences_clone.read().unwrap())
         });
     }
-    let results = pool.join();
+    let results = pool.join_unordered();
     let mut action_sequences = action_sequences.write().unwrap();
     for result in results {
         for sub_sequence in result {
             action_sequences.remove(&sub_sequence);
         }
     }
-    let result: Vec<CommandStatistics> = action_sequences.values().cloned().collect();
-    result
+    action_sequences.values().cloned().collect()
 }
 
 pub fn find_best(

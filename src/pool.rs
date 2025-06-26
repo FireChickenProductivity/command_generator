@@ -93,6 +93,23 @@ impl<JobResult: Send + 'static> ThreadPool<JobResult> {
         results.into_iter().map(|r| r.unwrap()).collect()
     }
 
+    pub fn join_unordered(&mut self) -> Vec<JobResult> {
+        if self.job_number == 0 {
+            return Vec::new();
+        }
+        let mut results = Vec::with_capacity(self.job_number);
+        let mut received = 0;
+        while let Ok((_, value)) = self.receiver.recv() {
+            results.push(value);
+            received += 1;
+            if received == self.job_number {
+                break;
+            }
+        }
+        self.job_number = 0;
+        results
+    }
+
     pub fn reduce(
         &mut self,
         f: impl Fn(JobResult, JobResult) -> JobResult + Send + 'static,
