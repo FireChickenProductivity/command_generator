@@ -408,10 +408,11 @@ mod tests {
                 total_number_of_words_dictated: 20,
             },
         ];
-        let recommendations_clone = recommendations.clone();
-        let best = find_best(recommendations_clone, 2);
+        let filtered =
+            filter_out_recommendations_redundant_smaller_commands(recommendations.clone());
+        let best = compute_greedy_best(&filtered, 2);
         assert_eq!(best.len(), 2);
-        assert_eq!(best[0].actions, recommendations[2].actions);
         assert_eq!(best[1].actions, recommendations[0].actions);
+        assert_eq!(best[0].actions, recommendations[2].actions);
     }
 }
