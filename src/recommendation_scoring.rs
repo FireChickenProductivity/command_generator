@@ -250,8 +250,9 @@ fn append_insert_subsequences_with_multiple_actions(
     let is_first_action_insert = is_insert(&sub_actions[0]);
     let last_index = sub_actions.len() - 1;
     let is_last_action_insert = is_insert(&sub_actions[last_index]);
-    let beginning_inserts = compute_beginning_inserts(is_first_action_insert, &sub_actions[0]);
-    let ending_inserts = compute_ending_inserts(is_last_action_insert, &sub_actions[last_index]);
+    let mut beginning_inserts = compute_beginning_inserts(is_first_action_insert, &sub_actions[0]);
+    let mut ending_inserts =
+        compute_ending_inserts(is_last_action_insert, &sub_actions[last_index]);
 
     if is_first_action_insert && !is_last_action_insert {
         let other_representation = compute_string_representation_of_actions(&sub_actions[1..]);
@@ -267,6 +268,8 @@ fn append_insert_subsequences_with_multiple_actions(
             collection.push(format!("{}{}", other_representation, s_rep));
         }
     } else if is_first_action_insert && is_last_action_insert {
+        beginning_inserts.push(get_insert_text(&sub_actions[0]).to_string());
+        ending_inserts.push(get_insert_text(&sub_actions[last_index]).to_string());
         let other_representation =
             compute_string_representation_of_actions(&sub_actions[1..last_index]);
         for (i, b) in beginning_inserts.iter().enumerate() {
