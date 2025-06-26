@@ -214,45 +214,61 @@ fn append_insert_subsequences(collection: &mut Vec<String>, action: &BasicAction
     }
 }
 
-fn _append_insert_subsequences_with_multiple_actions(
+fn compute_beginning_inserts(is_insert: bool, action: &BasicAction) -> Vec<String> {
+    let mut beginning_inserts = Vec::new();
+    if is_insert {
+        let inserted_text = get_insert_text(action);
+        if inserted_text.len() > 1 {
+            for i in 1..inserted_text.len() {
+                let s = inserted_text[i..].to_string();
+                beginning_inserts.push(s);
+            }
+        }
+    }
+    beginning_inserts
+}
+
+fn compute_ending_inserts(is_insert: bool, action: &BasicAction) -> Vec<String> {
+    let mut ending_inserts = Vec::new();
+    if is_insert {
+        let inserted_text = get_insert_text(action);
+        if inserted_text.len() > 1 {
+            for i in 1..inserted_text.len() {
+                let s = inserted_text[..i].to_string();
+                ending_inserts.push(s);
+            }
+        }
+    }
+    ending_inserts
+}
+
+fn append_insert_subsequences_with_multiple_actions(
     collection: &mut Vec<String>,
     sub_actions: &[BasicAction],
 ) {
     // This assumes that there is more than one action
-    let mut beginning_inserts = Vec::new();
-    let mut ending_inserts = Vec::new();
-    if is_insert(&sub_actions[0]) {
-        let inserted_text = get_insert_text(&sub_actions[0]);
-        if inserted_text.len() > 1 {
-            for i in 1..inserted_text.len() {
-                beginning_inserts.push(inserted_text[i..].to_string());
-            }
-        }
-    }
-    if is_insert(&sub_actions[sub_actions.len() - 1]) {
-        let inserted_text = get_insert_text(&sub_actions[sub_actions.len() - 1]);
-        if inserted_text.len() > 1 {
-            for i in 1..inserted_text.len() {
-                ending_inserts.push(inserted_text[..i].to_string());
-            }
-        }
-    }
-    if is_insert(&sub_actions[0]) && !is_insert(&sub_actions[sub_actions.len() - 1]) {
+    let is_first_action_insert = is_insert(&sub_actions[0]);
+    let last_index = sub_actions.len() - 1;
+    let is_last_action_insert = is_insert(&sub_actions[last_index]);
+    let beginning_inserts = compute_beginning_inserts(is_first_action_insert, &sub_actions[0]);
+    let ending_inserts = compute_ending_inserts(is_last_action_insert, &sub_actions[last_index]);
+
+    if is_first_action_insert && !is_last_action_insert {
         let other_representation = compute_string_representation_of_actions(&sub_actions[1..]);
         for s in &beginning_inserts {
             let s_rep = create_insert_action(s).to_json();
             collection.push(format!("{}{}", s_rep, other_representation));
         }
-    } else if is_insert(&sub_actions[sub_actions.len() - 1]) && !is_insert(&sub_actions[0]) {
+    } else if is_last_action_insert && !is_first_action_insert {
         let other_representation =
-            compute_string_representation_of_actions(&sub_actions[..sub_actions.len() - 1]);
+            compute_string_representation_of_actions(&sub_actions[..last_index]);
         for s in &ending_inserts {
             let s_rep = create_insert_action(s).to_json();
             collection.push(format!("{}{}", other_representation, s_rep));
         }
-    } else if is_insert(&sub_actions[0]) && is_insert(&sub_actions[sub_actions.len() - 1]) {
+    } else if is_first_action_insert && is_last_action_insert {
         let other_representation =
-            compute_string_representation_of_actions(&sub_actions[1..sub_actions.len() - 1]);
+            compute_string_representation_of_actions(&sub_actions[1..last_index]);
         for (i, b) in beginning_inserts.iter().enumerate() {
             let b_rep = create_insert_action(b).to_json();
             for (j, e) in ending_inserts.iter().enumerate() {
@@ -278,7 +294,7 @@ fn compute_action_subsequences_including_leading_and_trailing_inserts(
             if sub_actions.len() == 1 && is_insert(&sub_actions[0]) {
                 append_insert_subsequences(&mut subsequences, &sub_actions[0]);
             } else if sub_actions.len() > 1 {
-                _append_insert_subsequences_with_multiple_actions(&mut subsequences, sub_actions);
+                append_insert_subsequences_with_multiple_actions(&mut subsequences, sub_actions);
             }
         }
     }
