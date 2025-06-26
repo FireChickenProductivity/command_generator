@@ -305,29 +305,6 @@ fn find_redundant_commands_from_command(
     redundant
 }
 
-// def filter_out_recommendations_redundant_smaller_commands(
-//     recommendations: list[PotentialCommandInformation],
-//     parallelize=True
-// ) -> list[PotentialCommandInformation]:
-//     #For every command that is a shorter version of another command but is not used any more times: remove it
-//     action_sequences: dict[str, PotentialCommandInformation] = {}
-//     for command in recommendations:
-//         representation = compute_string_representation_of_actions(command.get_actions())
-//         action_sequences[representation] = command
-//     to_remove = set()
-//     results = []
-//     with multiprocessing.Pool(num_cpus, initializer=initialize_redundancy_filter_worker, initargs=(action_sequences,)) as pool:
-//         for sequence in action_sequences:
-//             command = action_sequences[sequence]
-//             results.append(pool.apply_async(find_redundant_commands_from_command, (command,)))
-//         for result in results:
-//             for sub_sequence in result.get():
-//                 to_remove.add(sub_sequence)
-//     for sequence in to_remove:
-//         action_sequences.pop(sequence)
-//     result = [action_sequences[s] for s in action_sequences]
-//     return result
-
 fn filter_out_recommendations_redundant_smaller_commands(
     recommendations: Vec<CommandStatistics>,
 ) -> Vec<CommandStatistics> {
