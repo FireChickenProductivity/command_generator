@@ -338,7 +338,6 @@ fn filter_out_recommendations_redundant_smaller_commands(
         let representation = compute_string_representation_of_actions(&command.actions);
         action_sequences.insert(representation, command);
     }
-    let mut to_remove = HashSet::new();
     let action_sequences = Arc::new(RwLock::new(action_sequences));
 
     for sequence in action_sequences.read().unwrap().keys() {
@@ -349,14 +348,11 @@ fn filter_out_recommendations_redundant_smaller_commands(
         });
     }
     let results = pool.join();
+    let mut action_sequences = action_sequences.write().unwrap();
     for result in results {
         for sub_sequence in result {
-            to_remove.insert(sub_sequence);
+            action_sequences.remove(&sub_sequence);
         }
-    }
-    let mut action_sequences = action_sequences.write().unwrap();
-    for sequence in to_remove {
-        action_sequences.remove(&sequence);
     }
     let result: Vec<CommandStatistics> = action_sequences.values().cloned().collect();
     result
