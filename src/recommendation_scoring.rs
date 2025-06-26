@@ -1,8 +1,10 @@
-use crate::action_records::{Argument, BasicAction};
+use crate::action_records::BasicAction;
 use crate::action_utilities::*;
 use crate::pool;
-use crate::recommendation_generation::CommandStatistics;
-use std::sync::Arc;
+use crate::recommendation_generation::{
+    CommandStatistics, compute_string_representation_of_actions,
+};
+use std::sync::{Arc, RwLock};
 use std::{collections::HashMap, collections::HashSet};
 
 fn compute_number_of_commands_including_action(
@@ -191,14 +193,188 @@ fn compute_greedy_best(
     best_recommendations
 }
 
+fn compute_string_subsequences(text: &str) -> Vec<String> {
+    let mut subsequences = Vec::new();
+    for i in 0..text.len() {
+        for j in i..text.len() {
+            if j - i + 1 < text.len() {
+                subsequences.push(text[i..=j].to_string());
+            }
+        }
+    }
+    subsequences
+}
+
+fn append_insert_subsequences(collection: &mut Vec<String>, action: &BasicAction) {
+    let inserted_text = get_insert_text(action);
+    for s in compute_string_subsequences(inserted_text) {
+        let action = create_insert_action(&s);
+        let rep = action.to_json();
+        collection.push(rep);
+    }
+}
+
+fn _append_insert_subsequences_with_multiple_actions(
+    collection: &mut Vec<String>,
+    sub_actions: &[BasicAction],
+) {
+    // This assumes that there is more than one action
+    let mut beginning_inserts = Vec::new();
+    let mut ending_inserts = Vec::new();
+    if is_insert(&sub_actions[0]) {
+        let inserted_text = get_insert_text(&sub_actions[0]);
+        if inserted_text.len() > 1 {
+            for i in 1..inserted_text.len() {
+                beginning_inserts.push(inserted_text[i..].to_string());
+            }
+        }
+    }
+    if is_insert(&sub_actions[sub_actions.len() - 1]) {
+        let inserted_text = get_insert_text(&sub_actions[sub_actions.len() - 1]);
+        if inserted_text.len() > 1 {
+            for i in 1..inserted_text.len() {
+                ending_inserts.push(inserted_text[..i].to_string());
+            }
+        }
+    }
+    if is_insert(&sub_actions[0]) && !is_insert(&sub_actions[sub_actions.len() - 1]) {
+        let other_representation = compute_string_representation_of_actions(&sub_actions[1..]);
+        for s in &beginning_inserts {
+            let s_rep = create_insert_action(s).to_json();
+            collection.push(format!("{}{}", s_rep, other_representation));
+        }
+    } else if is_insert(&sub_actions[sub_actions.len() - 1]) && !is_insert(&sub_actions[0]) {
+        let other_representation =
+            compute_string_representation_of_actions(&sub_actions[..sub_actions.len() - 1]);
+        for s in &ending_inserts {
+            let s_rep = create_insert_action(s).to_json();
+            collection.push(format!("{}{}", other_representation, s_rep));
+        }
+    } else if is_insert(&sub_actions[0]) && is_insert(&sub_actions[sub_actions.len() - 1]) {
+        let other_representation =
+            compute_string_representation_of_actions(&sub_actions[1..sub_actions.len() - 1]);
+        for (i, b) in beginning_inserts.iter().enumerate() {
+            let b_rep = create_insert_action(b).to_json();
+            for (j, e) in ending_inserts.iter().enumerate() {
+                if i != beginning_inserts.len() - 1 || j != ending_inserts.len() - 1 {
+                    let e_rep = create_insert_action(e).to_json();
+                    collection.push(format!("{}{}{}", b_rep, other_representation, e_rep));
+                }
+            }
+        }
+    }
+}
+
+fn compute_action_subsequences_including_leading_and_trailing_inserts(
+    actions: &[BasicAction],
+) -> Vec<String> {
+    let mut subsequences = Vec::new();
+    for i in 0..actions.len() {
+        for j in i..actions.len() {
+            let sub_actions = &actions[i..=j];
+            if sub_actions.len() < actions.len() {
+                subsequences.push(compute_string_representation_of_actions(sub_actions));
+            }
+            if sub_actions.len() == 1 && is_insert(&sub_actions[0]) {
+                append_insert_subsequences(&mut subsequences, &sub_actions[0]);
+            } else if sub_actions.len() > 1 {
+                _append_insert_subsequences_with_multiple_actions(&mut subsequences, sub_actions);
+            }
+        }
+    }
+    subsequences
+}
+
+fn find_redundant_commands_from_command(
+    sequence: String,
+    sequences: &HashMap<String, CommandStatistics>,
+) -> Vec<String> {
+    let mut redundant = Vec::new();
+    let command = sequences
+        .get(&sequence)
+        .expect("Command not found in sequences");
+    for sub_sequence in
+        compute_action_subsequences_including_leading_and_trailing_inserts(&command.actions)
+    {
+        if let Some(existing_command) = sequences.get(&sub_sequence) {
+            if existing_command.number_of_times_used == command.number_of_times_used {
+                redundant.push(sub_sequence);
+            }
+        }
+    }
+    redundant
+}
+
+// def filter_out_recommendations_redundant_smaller_commands(
+//     recommendations: list[PotentialCommandInformation],
+//     parallelize=True
+// ) -> list[PotentialCommandInformation]:
+//     #For every command that is a shorter version of another command but is not used any more times: remove it
+//     action_sequences: dict[str, PotentialCommandInformation] = {}
+//     for command in recommendations:
+//         representation = compute_string_representation_of_actions(command.get_actions())
+//         action_sequences[representation] = command
+//     to_remove = set()
+//     results = []
+//     with multiprocessing.Pool(num_cpus, initializer=initialize_redundancy_filter_worker, initargs=(action_sequences,)) as pool:
+//         for sequence in action_sequences:
+//             command = action_sequences[sequence]
+//             results.append(pool.apply_async(find_redundant_commands_from_command, (command,)))
+//         for result in results:
+//             for sub_sequence in result.get():
+//                 to_remove.add(sub_sequence)
+//     for sequence in to_remove:
+//         action_sequences.pop(sequence)
+//     result = [action_sequences[s] for s in action_sequences]
+//     return result
+
+fn filter_out_recommendations_redundant_smaller_commands(
+    recommendations: Vec<CommandStatistics>,
+) -> Vec<CommandStatistics> {
+    // For every command that is a shorter version of another command but is not used any more times: remove it
+    let mut pool = pool::ThreadPool::create_with_max_threads();
+    let mut action_sequences: HashMap<String, CommandStatistics> = HashMap::new();
+    for command in recommendations.into_iter() {
+        let representation = compute_string_representation_of_actions(&command.actions);
+        action_sequences.insert(representation, command);
+    }
+    let mut to_remove = HashSet::new();
+    let action_sequences = Arc::new(RwLock::new(action_sequences));
+
+    for sequence in action_sequences.read().unwrap().keys() {
+        let action_sequences_clone = Arc::clone(&action_sequences);
+        let sequence = sequence.clone();
+        pool.execute(move || {
+            find_redundant_commands_from_command(sequence, &action_sequences_clone.read().unwrap())
+        });
+    }
+    let results = pool.join();
+    for result in results {
+        for sub_sequence in result {
+            to_remove.insert(sub_sequence);
+        }
+    }
+    let mut action_sequences = action_sequences.write().unwrap();
+    for sequence in to_remove {
+        action_sequences.remove(&sequence);
+    }
+    let result: Vec<CommandStatistics> = action_sequences.values().cloned().collect();
+    result
+}
+
 pub fn find_best(
-    recommendations: &Vec<CommandStatistics>,
+    recommendations: Vec<CommandStatistics>,
     max_number_of_recommendations: usize,
 ) -> Vec<CommandStatistics> {
     if max_number_of_recommendations >= recommendations.len() {
         return recommendations.clone();
     }
-    compute_greedy_best_in_parallel(recommendations, max_number_of_recommendations)
+    let recommendations = filter_out_recommendations_redundant_smaller_commands(recommendations);
+    println!(
+        "Narrowed it down to {} recommendations",
+        recommendations.len()
+    );
+    compute_greedy_best_in_parallel(&recommendations, max_number_of_recommendations)
 }
 
 #[cfg(test)]
@@ -220,7 +396,7 @@ mod tests {
                 number_of_times_used: 20,
                 number_of_words_saved: 40,
                 instantiation_set: None,
-                actions: vec![create_insert_action("test")],
+                actions: vec![create_insert_action("text")],
                 number_of_actions: 1,
                 total_number_of_words_dictated: 20,
             },
@@ -236,12 +412,13 @@ mod tests {
                 number_of_times_used: 20,
                 number_of_words_saved: 30,
                 instantiation_set: None,
-                actions: vec![create_insert_action("test2")],
+                actions: vec![create_insert_action("tarp2")],
                 number_of_actions: 1,
                 total_number_of_words_dictated: 20,
             },
         ];
-        let best = find_best(&recommendations, 2);
+        let recommendations_clone = recommendations.clone();
+        let best = find_best(recommendations_clone, 2);
         assert_eq!(best.len(), 2);
         assert_eq!(best[0].actions, recommendations[2].actions);
         assert_eq!(best[1].actions, recommendations[0].actions);

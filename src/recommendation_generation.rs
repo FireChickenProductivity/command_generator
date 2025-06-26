@@ -159,7 +159,7 @@ pub struct ActionSet {
     set: HashSet<String>,
 }
 
-pub fn compute_string_representation_of_actions(actions: &Vec<BasicAction>) -> String {
+pub fn compute_string_representation_of_actions(actions: &[BasicAction]) -> String {
     actions
         .iter()
         .map(|action| action.to_json())
