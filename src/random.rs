@@ -11,7 +11,7 @@ const INCREMENT: u64 = 11;
 
 fn compute_relevant_bits(value: u64) -> u32 {
     // Convert to u32 using bits 47 through 17 of the 64 bit value
-    let bits = (value >> 17) & 0b11111111111111111111111111111111; // 31 bits
+    let bits = (value >> 16) & 0b1111111111111111111111111111111; // 31 bits
     u32::try_from(bits).expect("This should always fit in 32 bits")
 }
 
@@ -37,5 +37,17 @@ impl RandomNumberGenerator {
         let range = end - start;
         let random_value = self.next() as usize % range;
         start + random_value
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bit_conversion() {
+        let value: u64 = 0b1011111010001001110010110111111111100000000001110110111110001101;
+        let bits = compute_relevant_bits(value);
+        assert_eq!(bits, 0b1001011011111111110000000000111);
     }
 }
