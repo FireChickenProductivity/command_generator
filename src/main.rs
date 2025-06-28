@@ -4,6 +4,7 @@ mod current_time;
 mod data_output;
 mod input_parsing;
 mod pool;
+mod random;
 mod recommendation_generation;
 mod recommendation_scoring;
 mod text_separation;
