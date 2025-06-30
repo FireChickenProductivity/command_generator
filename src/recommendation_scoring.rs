@@ -102,7 +102,7 @@ fn score_recommendations_weighting_by_inverse_action_frequency(
     score
 }
 
-fn compute_heuristic_recommendation_score(recommendations: &Vec<CommandStatistics>) -> f64 {
+pub fn compute_heuristic_recommendation_score(recommendations: &Vec<CommandStatistics>) -> f64 {
     let num_commands_including_action =
         compute_number_of_commands_including_action(recommendations);
     let single_inserts = compute_single_inserts_from_commands(recommendations);
@@ -163,7 +163,7 @@ fn compute_greedy_best_in_parallel(
     best_recommendations
 }
 
-fn compute_greedy_best(
+pub fn compute_greedy_best(
     recommendations: &Vec<CommandStatistics>,
     max_number_of_recommendations: usize,
 ) -> Vec<CommandStatistics> {
