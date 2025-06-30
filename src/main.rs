@@ -3,6 +3,7 @@ mod action_utilities;
 mod current_time;
 mod data_output;
 mod input_parsing;
+mod monte_carlo_tree_search;
 mod pool;
 mod random;
 mod recommendation_generation;
