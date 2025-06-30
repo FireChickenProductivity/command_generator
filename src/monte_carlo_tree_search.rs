@@ -151,13 +151,22 @@ impl MonteCarloExplorationData {
         (best_index, best_value)
     }
 
+    fn compute_best_child_from_node(node: &ScoredNode, c: f64) -> (usize, f64) {
+        let children = node.get_children();
+        let best_score = Self::compute_best_score(children);
+        let times_parent_explored = node.get_times_explored();
+        Self::compute_best_child_from_iterable(
+            node.get_children(),
+            times_parent_explored,
+            best_score,
+            c,
+        )
+    }
+
     /// Assumes that progress has a child and picks the best one using UCT
     pub fn compute_best_child(&self, progress: Option<&ScoredNode>, c: f64) -> (usize, f64) {
         if let Some(progress) = progress {
-            let children = progress.get_children();
-            let best_score = Self::compute_best_score(progress.get_children());
-            let times_parent_explored = progress.get_times_explored();
-            Self::compute_best_child_from_iterable(children, times_parent_explored, best_score, c)
+            Self::compute_best_child_from_node(progress, c)
         } else {
             let children = self.roots.values();
             let best_score = Self::compute_best_score(self.roots.values());
@@ -442,7 +451,37 @@ impl MonteCarloTreeSearcher {
             .back_propagate_score(starting_path, score);
     }
 
-    fn select_starting_path(&self) -> Vec<usize> {
+    fn select_starting_path(&mut self) -> Vec<usize> {
         let mut path = self.start.clone();
+        let starting_index = {
+            let roots = self.exploration_data.get_roots();
+            if roots.is_empty() {
+                path.len()
+            } else {
+                let (index, _) = self.exploration_data.compute_best_child(None, self.c);
+                index
+            }
+        };
+        let progress = {
+            let roots = self.exploration_data.get_roots();
+            let mut progress = roots.get_mut(&starting_index).unwrap();
+            path.push(starting_index);
+            while path.len() < self.maximum_depth - 1 && progress.has_children() {
+                let (best_child, _) =
+                    MonteCarloExplorationData::compute_best_child_from_node(progress, self.c);
+                progress = progress.get_child(best_child);
+                path.push(best_child);
+            }
+            progress
+        };
+        if path.len() < self.maximum_depth - 1 && !progress.has_children() {
+            self.explore_every_child(&mut path);
+            let (best_child, _) =
+                MonteCarloExplorationData::compute_best_child_from_node(progress, self.c);
+            path.push(best_child);
+        }
+        path
     }
+
+    fn explore_every_child(&mut self, starting_path: &mut Vec<usize>) {}
 }
