@@ -167,8 +167,8 @@ pub fn compute_greedy_best(
     recommendations: &Vec<CommandStatistics>,
     max_number_of_recommendations: usize,
     start: &Vec<usize>,
-    index_range: &(usize, usize),
-) -> Vec<CommandStatistics> {
+    index_range: (usize, usize),
+) -> (Vec<CommandStatistics>, f64, Vec<usize>) {
     // Finds the best recommendations by for every n-th recommendation
     // finding the recommendation that has the best score with the ones chosen so far
     let mut best_recommendations = Vec::new();
@@ -177,6 +177,7 @@ pub fn compute_greedy_best(
         best_recommendations.push(recommendations[*i].clone());
         consumed_indexes.insert(*i);
     }
+    let mut score = 0.0;
     while best_recommendations.len() < max_number_of_recommendations
         && best_recommendations.len() < recommendations.len()
     {
@@ -196,19 +197,24 @@ pub fn compute_greedy_best(
         }
         best_recommendations.push(recommendations[best_index].clone());
         consumed_indexes.insert(best_index);
+        score = best_score;
     }
-    best_recommendations
+    (
+        best_recommendations,
+        score,
+        consumed_indexes.into_iter().collect(),
+    )
 }
 
 fn compute_greedy_best_from_scratch(
     recommendations: &Vec<CommandStatistics>,
     max_number_of_recommendations: usize,
-) -> Vec<CommandStatistics> {
+) -> (Vec<CommandStatistics>, f64, Vec<usize>) {
     compute_greedy_best(
         recommendations,
         max_number_of_recommendations,
         &vec![],
-        &(0, recommendations.len()),
+        (0, recommendations.len()),
     )
 }
 
@@ -429,7 +435,7 @@ mod tests {
         ];
         let filtered =
             filter_out_recommendations_redundant_smaller_commands(recommendations.clone());
-        let best = compute_greedy_best_from_scratch(&filtered, 2);
+        let (best, _, _) = compute_greedy_best_from_scratch(&filtered, 2);
         assert_eq!(best.len(), 2);
         assert_eq!(best[1].actions, recommendations[0].actions);
         assert_eq!(best[0].actions, recommendations[2].actions);

@@ -355,6 +355,7 @@ pub struct MonteCarloTreeSearcher {
     rollouts_per_exploration: usize,
     rollouts_per_child_expansion: usize,
     c: f64,
+    random_number_generator: RandomNumberGenerator,
 }
 
 impl MonteCarloTreeSearcher {
@@ -366,6 +367,7 @@ impl MonteCarloTreeSearcher {
         c: f64,
         rollouts_per_exploration: usize,
         rollouts_per_child_expansion: usize,
+        seed: u64,
     ) -> Self {
         let maximum_depth = std::cmp::min(start.len() + max_depth, recommendation_limit);
         MonteCarloTreeSearcher {
@@ -380,6 +382,7 @@ impl MonteCarloTreeSearcher {
             rollouts_per_exploration,
             rollouts_per_child_expansion,
             c,
+            random_number_generator: RandomNumberGenerator::new(seed),
         }
     }
 
@@ -389,5 +392,57 @@ impl MonteCarloTreeSearcher {
 
     pub fn get_best_recommendation_indexes(&self) -> &Vec<usize> {
         &self.best_recommendation_indexes
+    }
+
+    fn simulate_play_out(&mut self, starting_path: &[usize], use_greedy: bool) {
+        let mut path = starting_path.to_vec();
+        let num_remaining = self.recommendation_limit - starting_path.len();
+        let mut next_possible_index = *path.last().unwrap_or(&0);
+        let mut last_potential_index = self.recommendations.len() - num_remaining;
+        let num_random = if use_greedy {
+            std::cmp::max(num_remaining - 1, 0)
+        } else {
+            num_remaining
+        };
+
+        for _ in 0..num_random {
+            let choice = self
+                .random_number_generator
+                .next_in_range(next_possible_index, last_potential_index);
+            next_possible_index = choice + 1;
+            last_potential_index += 1;
+            path.push(choice);
+        }
+
+        let (potential_recommendations, score, path) = if use_greedy {
+            let (potential_recommendations, score, mut path) = compute_greedy_best(
+                &self.recommendations,
+                self.recommendation_limit,
+                &path,
+                (next_possible_index, last_potential_index + 1),
+            );
+            path.sort();
+            (potential_recommendations, score, path)
+        } else {
+            let potential_recommendations: Vec<CommandStatistics> = path
+                .iter()
+                .map(|&i| self.recommendations[i].clone())
+                .collect();
+            let score = compute_heuristic_recommendation_score(&potential_recommendations);
+            (potential_recommendations, score, path)
+        };
+
+        if score > self.best_score {
+            self.best_score = score;
+            self.best_recommendation = potential_recommendations;
+            self.best_recommendation_indexes = path;
+        }
+
+        self.exploration_data
+            .back_propagate_score(starting_path, score);
+    }
+
+    fn select_starting_path(&self) -> Vec<usize> {
+        let mut path = self.start.clone();
     }
 }
