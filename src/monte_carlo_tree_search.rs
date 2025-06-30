@@ -14,11 +14,10 @@ pub struct NodeData {
 pub struct ScoredNode {
     children: HashMap<usize, ScoredNode>,
     data: NodeData,
-    depth: usize,
 }
 
 impl ScoredNode {
-    pub fn new(index: usize, depth: usize) -> Self {
+    pub fn new(index: usize) -> Self {
         ScoredNode {
             children: HashMap::new(),
             data: NodeData {
@@ -26,12 +25,7 @@ impl ScoredNode {
                 score: 0.0,
                 times_explored: 0,
             },
-            depth,
         }
-    }
-
-    pub fn get_depth(&self) -> usize {
-        self.depth
     }
 
     pub fn get_data(&self) -> &NodeData {
@@ -80,7 +74,7 @@ impl ScoredNode {
 
     pub fn get_child(&mut self, index: usize) -> &mut ScoredNode {
         if !self.children.contains_key(&index) {
-            let child = ScoredNode::new(index, self.depth + 1);
+            let child = ScoredNode::new(index);
             self.children.insert(index, child);
         }
         self.children.get_mut(&index).unwrap()
@@ -113,18 +107,10 @@ impl MonteCarloExplorationData {
         }
     }
 
-    pub fn get_progress_from_choice<'a>(
-        &'a mut self,
-        choice: usize,
-        progress: Option<&'a mut ScoredNode>,
-    ) -> &'a mut ScoredNode {
-        if let Some(progress) = progress {
-            progress.get_child(choice)
-        } else {
-            self.roots
-                .entry(choice)
-                .or_insert_with(|| ScoredNode::new(choice, 0))
-        }
+    pub fn get_root(&mut self, index: usize) -> &mut ScoredNode {
+        self.roots
+            .entry(index)
+            .or_insert_with(|| ScoredNode::new(index))
     }
 
     pub fn progress_has_children(&self, progress: Option<&ScoredNode>) -> bool {
@@ -193,21 +179,20 @@ impl MonteCarloExplorationData {
         }
     }
 
-    pub fn handle_expansion(&mut self, path: &[usize]) {
-        let mut progress = None;
-        for &choice in path {
-            progress = Some(self.get_progress_from_choice(choice, progress));
+    pub fn handle_exploration(&mut self, path: &[usize], times: usize) {
+        self.increment_total_explored(times);
+        let mut progress = self.get_root(path[0]);
+        progress.handle_exploration(times);
+        for &choice in &path[1..] {
+            progress = progress.get_child(choice);
+            progress.handle_exploration(times);
         }
     }
 
-    pub fn handle_exploration(&mut self, path: &[usize], times: usize) {
-        self.total_explored += times;
-        let mut progress = None;
-        for &choice in path {
-            progress = Some(self.get_progress_from_choice(choice, progress));
-            if let Some(p) = progress {
-                p.handle_exploration(times);
-            }
+    pub fn handle_expansion(&mut self, path: &[usize]) {
+        let mut progress = self.get_root(path[0]);
+        for &choice in &path[1..] {
+            progress = progress.get_child(choice);
         }
     }
 
@@ -216,13 +201,19 @@ impl MonteCarloExplorationData {
     }
 
     pub fn create_initial_for_path(&mut self, path: &[usize]) -> &mut ScoredNode {
-        let mut progress = None;
-        for &choice in path {
-            progress = Some(self.get_progress_from_choice(choice, progress));
-            if let Some(p) = progress {
-                p.handle_exploration(1);
-            }
+        // In the original python program, I counted this as an exploration for some reason. My decision to not do that may cause a bug.
+        let mut progress = self.get_root(path[0]);
+        for &choice in &path[1..] {
+            progress = progress.get_child(choice);
         }
-        progress.unwrap()
+        progress
+    }
+
+    pub fn increment_total_explored(&mut self, times: usize) {
+        self.total_explored += times;
+    }
+
+    pub fn get_roots(&mut self) -> &mut HashMap<usize, ScoredNode> {
+        &mut self.roots
     }
 }
