@@ -166,17 +166,24 @@ fn compute_greedy_best_in_parallel(
 pub fn compute_greedy_best(
     recommendations: &Vec<CommandStatistics>,
     max_number_of_recommendations: usize,
+    start: &Vec<usize>,
+    index_range: &(usize, usize),
 ) -> Vec<CommandStatistics> {
     // Finds the best recommendations by for every n-th recommendation
     // finding the recommendation that has the best score with the ones chosen so far
     let mut best_recommendations = Vec::new();
     let mut consumed_indexes = HashSet::new();
+    for i in start.iter() {
+        best_recommendations.push(recommendations[*i].clone());
+        consumed_indexes.insert(*i);
+    }
     while best_recommendations.len() < max_number_of_recommendations
         && best_recommendations.len() < recommendations.len()
     {
         let mut best_score = f64::NEG_INFINITY;
         let mut best_index = 0;
-        for (index, recommendation) in recommendations.iter().enumerate() {
+        for index in index_range.0..index_range.1 {
+            let recommendation = &recommendations[index];
             if !consumed_indexes.contains(&index) {
                 best_recommendations.push(recommendation.clone());
                 let score = compute_heuristic_recommendation_score(&best_recommendations);
@@ -191,6 +198,18 @@ pub fn compute_greedy_best(
         consumed_indexes.insert(best_index);
     }
     best_recommendations
+}
+
+fn compute_greedy_best_from_scratch(
+    recommendations: &Vec<CommandStatistics>,
+    max_number_of_recommendations: usize,
+) -> Vec<CommandStatistics> {
+    compute_greedy_best(
+        recommendations,
+        max_number_of_recommendations,
+        &vec![],
+        &(0, recommendations.len()),
+    )
 }
 
 fn compute_string_subsequences(text: &str) -> Vec<String> {
@@ -410,7 +429,7 @@ mod tests {
         ];
         let filtered =
             filter_out_recommendations_redundant_smaller_commands(recommendations.clone());
-        let best = compute_greedy_best(&filtered, 2);
+        let best = compute_greedy_best_from_scratch(&filtered, 2);
         assert_eq!(best.len(), 2);
         assert_eq!(best[1].actions, recommendations[0].actions);
         assert_eq!(best[0].actions, recommendations[2].actions);
