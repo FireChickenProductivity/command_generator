@@ -554,4 +554,39 @@ impl MonteCarloTreeSearcher {
     pub fn get_best_recommendation_indexes(&self) -> &Vec<usize> {
         self.roller.get_best_recommendation_indexes()
     }
+
+    fn explore_solution(&mut self) {
+        let path = select_starting_path(
+            &mut self.exploration_data,
+            &mut self.roller,
+            &self.start,
+            &self.constants,
+        );
+        assert!(path.len() <= self.constants.recommendation_limit);
+        self.exploration_data.handle_expansion(&path);
+        for _ in 0..self.constants.rollouts_per_exploration {
+            let score = self.roller.simulate_play_out(&path, true, &self.constants);
+            self.exploration_data.back_propagate_score(&path, score);
+        }
+        self.exploration_data
+            .handle_exploration(&path, self.constants.rollouts_per_exploration);
+    }
+
+    pub fn explore_solutions(&mut self, num_trials: usize) {
+        for _ in 0..num_trials {
+            self.explore_solution();
+        }
+    }
+
+    pub fn get_root_values(&self) -> HashMap<usize, (f64, usize)> {
+        let roots = self.exploration_data.get_roots();
+        let mut values = HashMap::new();
+        for (key, root) in roots {
+            values.insert(
+                key.clone(),
+                (root.get_total_score(), root.get_times_explored()),
+            );
+        }
+        values
+    }
 }
