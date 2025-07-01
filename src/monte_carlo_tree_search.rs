@@ -564,7 +564,6 @@ fn possibly_perform_parallel_monte_carlo_tree_search(
         let start = Arc::new(start.clone());
         let mut best_score = 0.0;
         let mut best_recommendation_indexes = Vec::new();
-        let mut best_index = 0;
         for i in 0..num_workers {
             let recommendations_copy = Arc::clone(&recommendations_copy);
             let start = Arc::clone(&start);
@@ -584,25 +583,25 @@ fn possibly_perform_parallel_monte_carlo_tree_search(
                     searcher.get_root_values(),
                 )
             });
-            let results = pool.join_unordered();
-            let mut value_aggregation: HashMap<usize, (f64, usize)> = HashMap::new();
-            for (score, indexes, root_values) in results {
-                if score > best_score {
-                    best_score = score;
-                    best_recommendation_indexes = indexes;
-                }
-                if value_aggregation.is_empty() {
-                    value_aggregation = root_values;
-                } else {
-                    for (key, &(total_score, num_explorations)) in root_values.iter() {
-                        let entry = value_aggregation.entry(*key).or_insert((0.0, 0));
-                        entry.0 += total_score;
-                        entry.1 += num_explorations;
-                    }
+        }
+        let results = pool.join_unordered();
+        let mut value_aggregation: HashMap<usize, (f64, usize)> = HashMap::new();
+        for (score, indexes, root_values) in results {
+            if score > best_score {
+                best_score = score;
+                best_recommendation_indexes = indexes;
+            }
+            if value_aggregation.is_empty() {
+                value_aggregation = root_values;
+            } else {
+                for (key, &(total_score, num_explorations)) in root_values.iter() {
+                    let entry = value_aggregation.entry(*key).or_insert((0.0, 0));
+                    entry.0 += total_score;
+                    entry.1 += num_explorations;
                 }
             }
-            best_index = compute_best_index_from_aggregation(&value_aggregation);
         }
+        let best_index = compute_best_index_from_aggregation(&value_aggregation);
         (best_score, best_recommendation_indexes, best_index)
     }
 }
