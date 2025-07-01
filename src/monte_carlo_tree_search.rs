@@ -81,13 +81,15 @@ impl ScoredNode {
     pub fn get_child_mut(&mut self, index: usize) -> &mut ScoredNode {
         if !self.children.contains_key(&index) {
             let child = ScoredNode::new(index);
-            self.children.insert(index, child);
+            self.children.insert(child.get_index(), child);
         }
         self.children.get_mut(&index).unwrap()
     }
 
     pub fn get_child(&self, index: usize) -> &ScoredNode {
-        self.children.get(&index).expect("Child not found")
+        self.children
+            .get(&index)
+            .expect(format!("Child node with index {} not found", index).as_str())
     }
 }
 
@@ -152,7 +154,7 @@ impl MonteCarloExplorationData {
             let value = child.get_score() / best_score
                 + c * ((times_parent_explored as f64).ln() / child.get_times_explored() as f64)
                     .sqrt();
-            if value > best_value {
+            if value >= best_value {
                 best_index = child.get_index();
                 best_value = value;
             }
@@ -330,7 +332,6 @@ pub struct MonteCarloTreeSearcher<'a> {
     start: Vec<usize>,
     constants: SearchConstants,
     exploration_data: MonteCarloExplorationData,
-    random_number_generator: RandomNumberGenerator,
 }
 
 fn explore_every_child(
@@ -368,8 +369,13 @@ fn explore_every_child(
         progress.handle_exploration(constants.rollouts_per_child_expansion);
         path.pop();
     }
-    let progress = &data.create_initial_for_path(path);
-    MonteCarloExplorationData::compute_best_child_from_node(progress, constants.c).0
+    if path.len() > start_length {
+        let progress = &data.create_initial_for_path(&path[start_length..]);
+        MonteCarloExplorationData::compute_best_child_from_node(progress, constants.c).0
+    } else {
+        let (index, _) = data.compute_best_child(None, constants.c);
+        index
+    }
 }
 
 fn select_starting_path(
@@ -391,15 +397,19 @@ fn select_starting_path(
     };
     let has_children = {
         let roots = data.get_roots();
-        let mut progress = roots.get(&starting_index).unwrap();
-        path.push(starting_index);
-        while path.len() < constants.maximum_depth - 1 && progress.has_children() {
-            let (best_child, _) =
-                MonteCarloExplorationData::compute_best_child_from_node(progress, constants.c);
-            progress = progress.get_child(best_child);
-            path.push(best_child);
+        if roots.is_empty() {
+            false
+        } else {
+            let mut progress = roots.get(&starting_index).unwrap();
+            path.push(starting_index);
+            while path.len() < constants.maximum_depth - 1 && progress.has_children() {
+                let (best_child, _) =
+                    MonteCarloExplorationData::compute_best_child_from_node(progress, constants.c);
+                progress = progress.get_child(best_child);
+                path.push(best_child);
+            }
+            progress.has_children()
         }
-        progress.has_children()
     };
     if path.len() < constants.maximum_depth - 1 && !has_children {
         let best_child = explore_every_child(&mut path, data, roller, constants, start.len());
@@ -428,7 +438,6 @@ impl<'a> MonteCarloTreeSearcher<'a> {
                 maximum_depth: max_remaining_depth,
                 recommendation_limit,
             },
-            random_number_generator: RandomNumberGenerator::new(seed),
         }
     }
 
@@ -449,6 +458,7 @@ impl<'a> MonteCarloTreeSearcher<'a> {
         );
         assert!(path.len() <= self.constants.recommendation_limit);
         let path_after_start = &path[self.start.len()..];
+        assert!(path_after_start.len() > 0);
         self.exploration_data.handle_expansion(path_after_start);
         for _ in 0..self.constants.rollouts_per_exploration {
             let score = self.roller.simulate_play_out(&path, true, &self.constants);
@@ -538,7 +548,8 @@ fn possibly_perform_parallel_monte_carlo_tree_search(
     number_of_trials: usize,
     seed: u64,
 ) -> (f64, Vec<usize>, usize) {
-    let num_workers = compute_parallelism();
+    // let num_workers = compute_parallelism();
+    let num_workers = 1;
     let trials_per_worker = if num_workers == 1 {
         number_of_trials
     } else {
