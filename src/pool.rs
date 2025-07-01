@@ -36,6 +36,10 @@ impl Worker {
     }
 }
 
+pub fn compute_parallelism() -> usize {
+    thread::available_parallelism().map_or(1, |n| n.get())
+}
+
 pub struct ThreadPool<JobResult> {
     workers: Vec<Worker>,
     sender: mpsc::Sender<(usize, Job<JobResult>)>,
@@ -62,7 +66,7 @@ impl<JobResult: Send + 'static> ThreadPool<JobResult> {
     }
 
     pub fn create_with_max_threads() -> Self {
-        let size = thread::available_parallelism().map_or(1, |n| n.get());
+        let size = compute_parallelism();
         Self::new(size)
     }
 

@@ -1,4 +1,4 @@
-use crate::pool::ThreadPool;
+use crate::pool::{ThreadPool, compute_parallelism};
 use crate::random::RandomNumberGenerator;
 use crate::recommendation_generation::CommandStatistics;
 use crate::recommendation_scoring::{
@@ -7,7 +7,6 @@ use crate::recommendation_scoring::{
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
-    thread,
 };
 
 #[derive(Clone)]
@@ -532,44 +531,78 @@ fn compute_best_index_from_aggregation(aggregation: &HashMap<usize, (f64, usize)
     best_index
 }
 
-// def perform_possibly_parallel_monte_carlo_tree_search(scoring_function, recommendation_limit, recommendations, indexes, greedy_function, number_of_trials: int, aggregate_tree=True, cores_override: int=None, c: float=1):
-//     try:
-//         if cores_override:
-//             num_workers = min(cores_override, multiprocessing.cpu_count())
-//         else:
-//             num_workers = multiprocessing.cpu_count()
-//     except:
-//         num_workers = 1
-//     trials_per_worker = number_of_trials if num_workers == 1 else round(1.7*number_of_trials/num_workers)
-//     search_arguments = (max(trials_per_worker, 10), scoring_function, recommendation_limit, recommendations, indexes, recommendation_limit - len(indexes) - 1, greedy_function, c)
-//     if num_workers == 1:
-//         return perform_worker_monte_carlo_tree_search(*search_arguments)
-//     else:
-//         results = []
-//         with multiprocessing.Pool(processes=num_workers) as p:
-//             for _ in range(num_workers):
-//                 result = p.apply_async(perform_worker_monte_carlo_tree_search, search_arguments, {"aggregate_tree": aggregate_tree})
-//                 results.append(result)
-//             best_score = 0
-//             best_recommendation_indexes: list[int]
-//             if aggregate_tree:
-//                 value_aggregation = None
-//             for result in results:
-//                 if aggregate_tree:
-//                     values, score, indexes = result.get()
-//                     if value_aggregation is None:
-//                         value_aggregation = values
-//                     else:
-//                         for key in values:
-//                             total_score, num_explorations = values[key]
-//                             value_aggregation[key][0] += total_score
-//                             value_aggregation[key][1] += num_explorations
-//                 else:
-//                     score, indexes = result.get()
-//                 if score > best_score:
-//                     best_score = score
-//                     best_recommendation_indexes = indexes
-//         print(f"Best score {best_score} using {num_workers} workers.")
-//         if aggregate_tree:
-//             return compute_best_index_from_aggregation(value_aggregation), best_score, best_recommendation_indexes
-//         return best_score, best_recommendation_indexes
+fn possibly_perform_parallel_monte_carlo_tree_search(
+    recommendations: &Vec<CommandStatistics>,
+    start: &Vec<usize>,
+    recommendation_limit: usize,
+    number_of_trials: usize,
+    seed: u64,
+) -> (f64, Vec<usize>, usize) {
+    let num_workers = compute_parallelism();
+    let trials_per_worker = if num_workers == 1 {
+        number_of_trials
+    } else {
+        (1.7 * number_of_trials as f64 / num_workers as f64).round() as usize
+    };
+
+    if num_workers == 1 {
+        let searcher = perform_worker_monte_carlo_tree_search(
+            recommendations,
+            &start,
+            recommendation_limit,
+            seed,
+            trials_per_worker,
+        );
+        let best_score = searcher.get_best_score();
+        let best_recommendation_indexes = searcher.get_best_recommendation_indexes().clone();
+        let best_index = best_recommendation_indexes[start.len()].clone();
+        (best_score, best_recommendation_indexes, best_index)
+    } else {
+        let mut pool = ThreadPool::new(num_workers);
+        let recommendations_copy = recommendations.clone();
+        let recommendations_copy = Arc::new(recommendations_copy);
+        let start = Arc::new(start.clone());
+        let mut best_score = 0.0;
+        let mut best_recommendation_indexes = Vec::new();
+        let mut best_index = 0;
+        for i in 0..num_workers {
+            let recommendations_copy = Arc::clone(&recommendations_copy);
+            let start = Arc::clone(&start);
+            let thread_seed = seed + i as u64;
+
+            pool.execute(move || {
+                let searcher = perform_worker_monte_carlo_tree_search(
+                    &recommendations_copy,
+                    &start,
+                    recommendation_limit,
+                    thread_seed,
+                    trials_per_worker,
+                );
+                (
+                    searcher.get_best_score(),
+                    searcher.get_best_recommendation_indexes().clone(),
+                    searcher.get_root_values(),
+                )
+            });
+            let results = pool.join_unordered();
+            let mut value_aggregation: HashMap<usize, (f64, usize)> = HashMap::new();
+            for (score, indexes, root_values) in results {
+                if score > best_score {
+                    best_score = score;
+                    best_recommendation_indexes = indexes;
+                }
+                if value_aggregation.is_empty() {
+                    value_aggregation = root_values;
+                } else {
+                    for (key, &(total_score, num_explorations)) in root_values.iter() {
+                        let entry = value_aggregation.entry(*key).or_insert((0.0, 0));
+                        entry.0 += total_score;
+                        entry.1 += num_explorations;
+                    }
+                }
+            }
+            best_index = compute_best_index_from_aggregation(&value_aggregation);
+        }
+        (best_score, best_recommendation_indexes, best_index)
+    }
+}
