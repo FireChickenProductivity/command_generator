@@ -4,7 +4,11 @@ use crate::recommendation_generation::CommandStatistics;
 use crate::recommendation_scoring::{
     compute_greedy_best, compute_greedy_best_in_parallel, compute_heuristic_recommendation_score,
 };
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+    thread,
+};
 
 #[derive(Clone)]
 pub struct NodeData {
@@ -527,3 +531,45 @@ fn compute_best_index_from_aggregation(aggregation: &HashMap<usize, (f64, usize)
     }
     best_index
 }
+
+// def perform_possibly_parallel_monte_carlo_tree_search(scoring_function, recommendation_limit, recommendations, indexes, greedy_function, number_of_trials: int, aggregate_tree=True, cores_override: int=None, c: float=1):
+//     try:
+//         if cores_override:
+//             num_workers = min(cores_override, multiprocessing.cpu_count())
+//         else:
+//             num_workers = multiprocessing.cpu_count()
+//     except:
+//         num_workers = 1
+//     trials_per_worker = number_of_trials if num_workers == 1 else round(1.7*number_of_trials/num_workers)
+//     search_arguments = (max(trials_per_worker, 10), scoring_function, recommendation_limit, recommendations, indexes, recommendation_limit - len(indexes) - 1, greedy_function, c)
+//     if num_workers == 1:
+//         return perform_worker_monte_carlo_tree_search(*search_arguments)
+//     else:
+//         results = []
+//         with multiprocessing.Pool(processes=num_workers) as p:
+//             for _ in range(num_workers):
+//                 result = p.apply_async(perform_worker_monte_carlo_tree_search, search_arguments, {"aggregate_tree": aggregate_tree})
+//                 results.append(result)
+//             best_score = 0
+//             best_recommendation_indexes: list[int]
+//             if aggregate_tree:
+//                 value_aggregation = None
+//             for result in results:
+//                 if aggregate_tree:
+//                     values, score, indexes = result.get()
+//                     if value_aggregation is None:
+//                         value_aggregation = values
+//                     else:
+//                         for key in values:
+//                             total_score, num_explorations = values[key]
+//                             value_aggregation[key][0] += total_score
+//                             value_aggregation[key][1] += num_explorations
+//                 else:
+//                     score, indexes = result.get()
+//                 if score > best_score:
+//                     best_score = score
+//                     best_recommendation_indexes = indexes
+//         print(f"Best score {best_score} using {num_workers} workers.")
+//         if aggregate_tree:
+//             return compute_best_index_from_aggregation(value_aggregation), best_score, best_recommendation_indexes
+//         return best_score, best_recommendation_indexes

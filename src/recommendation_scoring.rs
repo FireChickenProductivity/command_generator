@@ -397,7 +397,13 @@ pub fn find_best(
         "Narrowed it down to {} recommendations",
         recommendations.len()
     );
-    compute_greedy_best_in_parallel(&recommendations, max_number_of_recommendations, &Vec::new()).0
+    let (best_recommendations, score) = compute_greedy_best_in_parallel(
+        &recommendations,
+        max_number_of_recommendations,
+        &Vec::new(),
+    );
+    println!("Greedy score: {}", score);
+    best_recommendations
 }
 
 #[cfg(test)]
