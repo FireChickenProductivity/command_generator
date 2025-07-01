@@ -1,5 +1,6 @@
 use crate::action_records::BasicAction;
 use crate::action_utilities::*;
+use crate::monte_carlo_tree_search::perform_monte_carlo_tree_search;
 use crate::pool;
 use crate::recommendation_generation::{
     CommandStatistics, compute_string_representation_of_actions,
@@ -392,7 +393,8 @@ pub fn find_best(
     if max_number_of_recommendations >= recommendations.len() {
         return recommendations.clone();
     }
-    let recommendations = filter_out_recommendations_redundant_smaller_commands(recommendations);
+    let mut recommendations =
+        filter_out_recommendations_redundant_smaller_commands(recommendations);
     println!(
         "Narrowed it down to {} recommendations",
         recommendations.len()
@@ -403,6 +405,12 @@ pub fn find_best(
         &Vec::new(),
     );
     println!("Greedy score: {}", score);
+    let (tree_recommendations, tree_score) =
+        perform_monte_carlo_tree_search(&mut recommendations, max_number_of_recommendations);
+    println!("Monte Carlo Tree Search score: {}", tree_score);
+    if tree_score > score {
+        return tree_recommendations;
+    }
     best_recommendations
 }
 

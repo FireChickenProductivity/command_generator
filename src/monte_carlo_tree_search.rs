@@ -542,7 +542,7 @@ fn possibly_perform_parallel_monte_carlo_tree_search(
     let trials_per_worker = if num_workers == 1 {
         number_of_trials
     } else {
-        (1.7 * number_of_trials as f64 / num_workers as f64).round() as usize
+        ((1.7 * number_of_trials as f64 / num_workers as f64).round() as usize).max(10usize)
     };
 
     if num_workers == 1 {
@@ -604,4 +604,83 @@ fn possibly_perform_parallel_monte_carlo_tree_search(
         let best_index = compute_best_index_from_aggregation(&value_aggregation);
         (best_score, best_recommendation_indexes, best_index)
     }
+}
+
+pub fn perform_monte_carlo_tree_search(
+    recommendations: &mut Vec<CommandStatistics>,
+    recommendation_limit: usize,
+) -> (Vec<CommandStatistics>, f64) {
+    let number_of_trials =
+        (recommendations.len() as f64 / recommendation_limit as f64).round() as usize;
+    let mut start: Vec<usize> = Vec::new();
+    let seed = 0;
+    let mut best_score = 0.0;
+    let mut best: Vec<CommandStatistics> = Vec::new();
+    recommendations.sort_by(|a, b| {
+        b.number_of_words_saved
+            .partial_cmp(&a.number_of_words_saved)
+            .unwrap()
+    });
+    for i in 0..recommendation_limit - 1 {
+        if i > 0 {
+            let last_recommendations: Vec<CommandStatistics> =
+                start.iter().map(|&j| recommendations[j].clone()).collect();
+            let current_score = compute_heuristic_recommendation_score(&last_recommendations);
+            recommendations.retain(|r| {
+                let mut new_recommendations = last_recommendations.clone();
+                new_recommendations.push(r.clone());
+                let new_score = compute_heuristic_recommendation_score(&new_recommendations);
+                new_score >= current_score
+            });
+            if recommendations.len() < recommendation_limit - i {
+                println!("Ending tree search early");
+                break;
+            }
+        }
+        println!(
+            "Running round {} of tree search on {} recommendations",
+            i + 1,
+            recommendations.len()
+        );
+        let (score, indexes, best_index) =
+            if i == recommendation_limit - 2 && number_of_trials * 2 >= recommendations.len() {
+                let (score, best_indexes) = perform_double_greedy(
+                    start.clone(),
+                    start.len(),
+                    recommendations,
+                    recommendation_limit,
+                );
+                let best_index = best_indexes[i];
+                (score, best_indexes, best_index)
+            } else {
+                possibly_perform_parallel_monte_carlo_tree_search(
+                    &recommendations,
+                    &start,
+                    recommendation_limit,
+                    number_of_trials,
+                    seed as u64,
+                )
+            };
+        if score > best_score {
+            best_score = score;
+            best = indexes
+                .iter()
+                .map(|&j| recommendations[j].clone())
+                .collect();
+            println!("New best result {}", best_score);
+        }
+        start.push(i);
+        if best_index != i {
+            recommendations.swap(i, best_index);
+        }
+        let (greedy_result, greedy_score) =
+            compute_greedy_best_in_parallel(&recommendations, recommendation_limit, &start);
+        if greedy_score > best_score {
+            best_score = greedy_score;
+            best = greedy_result;
+            println!("Got better result with greedy {}", best_score);
+        }
+    }
+
+    (best, best_score)
 }
