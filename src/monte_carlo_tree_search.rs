@@ -242,16 +242,16 @@ struct SearchConstants {
     pub recommendation_limit: usize,
 }
 
-struct Roller {
+struct Roller<'a> {
     best_recommendation: Vec<CommandStatistics>,
     best_score: f64,
     best_recommendation_indexes: Vec<usize>,
-    recommendations: Vec<CommandStatistics>,
+    recommendations: &'a Vec<CommandStatistics>,
     generator: RandomNumberGenerator,
 }
 
-impl Roller {
-    fn new(recommendations: Vec<CommandStatistics>, seed: u64) -> Self {
+impl<'a> Roller<'a> {
+    fn new(recommendations: &'a Vec<CommandStatistics>, seed: u64) -> Self {
         Roller {
             best_recommendation: Vec::new(),
             best_score: 0.0,
@@ -322,12 +322,11 @@ impl Roller {
 }
 
 // Instead of using initial_progress, exploration data will only keep track of what happens after the start
-pub struct MonteCarloTreeSearcher {
-    roller: Roller,
+pub struct MonteCarloTreeSearcher<'a> {
+    roller: Roller<'a>,
     start: Vec<usize>,
     constants: SearchConstants,
     exploration_data: MonteCarloExplorationData,
-    c: f64,
     random_number_generator: RandomNumberGenerator,
 }
 
@@ -406,30 +405,26 @@ fn select_starting_path(
     path
 }
 
-impl MonteCarloTreeSearcher {
+impl<'a> MonteCarloTreeSearcher<'a> {
     pub fn new(
         recommendation_limit: usize,
-        recommendations: Vec<CommandStatistics>,
+        recommendations: &'a Vec<CommandStatistics>,
         start: Vec<usize>,
-        max_depth: usize,
-        c: f64,
-        rollouts_per_exploration: usize,
-        rollouts_per_child_expansion: usize,
         seed: u64,
     ) -> Self {
-        let maximum_depth = std::cmp::min(start.len() + max_depth, recommendation_limit);
+        let max_depth = recommendation_limit - start.len() - 1;
+        let max_remaining_depth = std::cmp::min(start.len() + max_depth, recommendation_limit);
         MonteCarloTreeSearcher {
             roller: Roller::new(recommendations, seed),
             exploration_data: MonteCarloExplorationData::new(),
             start,
             constants: SearchConstants {
-                c,
-                rollouts_per_exploration,
-                rollouts_per_child_expansion,
-                maximum_depth,
+                c: 0.000001,
+                rollouts_per_exploration: 10,
+                rollouts_per_child_expansion: 1,
+                maximum_depth: max_remaining_depth,
                 recommendation_limit,
             },
-            c,
             random_number_generator: RandomNumberGenerator::new(seed),
         }
     }
@@ -504,4 +499,31 @@ fn perform_double_greedy(
     println!("best score from double greedy: {}", best_score);
     best_indexes.push(best_index);
     (best_score, best_indexes)
+}
+
+fn perform_worker_monte_carlo_tree_search<'a>(
+    recommendations: &'a Vec<CommandStatistics>,
+    start: &Vec<usize>,
+    recommendation_limit: usize,
+    seed: u64,
+    number_of_trials: usize,
+) -> MonteCarloTreeSearcher<'a> {
+    let mut searcher =
+        MonteCarloTreeSearcher::new(recommendation_limit, recommendations, start.clone(), seed);
+    searcher.explore_solutions(number_of_trials);
+    searcher
+}
+
+fn compute_best_index_from_aggregation(aggregation: &HashMap<usize, (f64, usize)>) -> usize {
+    let mut best_score = 0.0;
+    let mut best_index = 0;
+
+    for (&key, &(score, num_explored)) in aggregation.iter() {
+        let average_score = score / num_explored as f64;
+        if average_score > best_score {
+            best_index = key;
+            best_score = average_score;
+        }
+    }
+    best_index
 }
