@@ -457,6 +457,7 @@ fn explore_every_child(
     data: &mut MonteCarloExplorationData,
     roller: &mut Roller,
     constants: &SearchConstants,
+    start_length: usize,
 ) -> usize {
     let start = if path.is_empty() {
         0
@@ -464,14 +465,21 @@ fn explore_every_child(
         *path.last().unwrap() + 1
     };
     let ending = roller.recommendations.len() - constants.recommendation_limit + path.len();
-    data.handle_exploration(path, ending - start);
+    let starting_path_index = if start_length < path.len() {
+        // I only need to handle counting exploration when we are past the root
+        data.handle_exploration(&path[start_length..], ending - start);
+        path.len()
+    } else {
+        0
+    };
+
     for i in start..ending {
         path.push(i);
-        let progress = data.get_root(path[0]);
+        let progress = data.get_root(path[starting_path_index]);
         for _ in 0..constants.rollouts_per_child_expansion {
             let score = roller.simulate_play_out(path, false, constants);
             progress.handle_score(score);
-            for j in 1..path.len() {
+            for j in starting_path_index + 1..path.len() {
                 let progress = progress.get_child_mut(path[j]);
                 progress.handle_score(score);
             }
@@ -513,7 +521,7 @@ fn select_starting_path(
         progress.has_children()
     };
     if path.len() < constants.maximum_depth - 1 && !has_children {
-        let best_child = explore_every_child(&mut path, data, roller, constants);
+        let best_child = explore_every_child(&mut path, data, roller, constants, start.len());
         path.push(best_child);
     }
     path
@@ -563,13 +571,15 @@ impl MonteCarloTreeSearcher {
             &self.constants,
         );
         assert!(path.len() <= self.constants.recommendation_limit);
-        self.exploration_data.handle_expansion(&path);
+        let path_after_start = &path[self.start.len()..];
+        self.exploration_data.handle_expansion(path_after_start);
         for _ in 0..self.constants.rollouts_per_exploration {
             let score = self.roller.simulate_play_out(&path, true, &self.constants);
-            self.exploration_data.back_propagate_score(&path, score);
+            self.exploration_data
+                .back_propagate_score(&path_after_start, score);
         }
         self.exploration_data
-            .handle_exploration(&path, self.constants.rollouts_per_exploration);
+            .handle_exploration(&path_after_start, self.constants.rollouts_per_exploration);
     }
 
     pub fn explore_solutions(&mut self, num_trials: usize) {
