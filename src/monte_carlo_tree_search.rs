@@ -73,12 +73,16 @@ impl ScoredNode {
         self.data.times_explored += times;
     }
 
-    pub fn get_child(&mut self, index: usize) -> &mut ScoredNode {
+    pub fn get_child_mut(&mut self, index: usize) -> &mut ScoredNode {
         if !self.children.contains_key(&index) {
             let child = ScoredNode::new(index);
             self.children.insert(index, child);
         }
         self.children.get_mut(&index).unwrap()
+    }
+
+    pub fn get_child(&self, index: usize) -> &ScoredNode {
+        self.children.get(&index).expect("Child not found")
     }
 }
 
@@ -100,7 +104,7 @@ impl MonteCarloExplorationData {
         if let Some(root) = self.roots.get_mut(&path[0]) {
             root.handle_score(score);
             for &index in &path[1..] {
-                let child = root.get_child(index);
+                let child = root.get_child_mut(index);
                 child.handle_score(score);
             }
         } else {
@@ -194,7 +198,7 @@ impl MonteCarloExplorationData {
         let mut progress = self.get_root(path[0]);
         progress.handle_exploration(times);
         for &choice in &path[1..] {
-            progress = progress.get_child(choice);
+            progress = progress.get_child_mut(choice);
             progress.handle_exploration(times);
         }
     }
@@ -202,19 +206,15 @@ impl MonteCarloExplorationData {
     pub fn handle_expansion(&mut self, path: &[usize]) {
         let mut progress = self.get_root(path[0]);
         for &choice in &path[1..] {
-            progress = progress.get_child(choice);
+            progress = progress.get_child_mut(choice);
         }
-    }
-
-    pub fn handle_child_exploration(&mut self, child: &mut ScoredNode) {
-        child.handle_exploration(1);
     }
 
     pub fn create_initial_for_path(&mut self, path: &[usize]) -> &mut ScoredNode {
         // In the original python program, I counted this as an exploration for some reason. My decision to not do that may cause a bug.
         let mut progress = self.get_root(path[0]);
         for &choice in &path[1..] {
-            progress = progress.get_child(choice);
+            progress = progress.get_child_mut(choice);
         }
         progress
     }
@@ -223,8 +223,12 @@ impl MonteCarloExplorationData {
         self.total_explored += times;
     }
 
-    pub fn get_roots(&mut self) -> &mut HashMap<usize, ScoredNode> {
+    pub fn get_roots_mut(&mut self) -> &mut HashMap<usize, ScoredNode> {
         &mut self.roots
+    }
+
+    pub fn get_roots(&self) -> &HashMap<usize, ScoredNode> {
+        &self.roots
     }
 }
 
@@ -351,61 +355,40 @@ impl MonteCarloExplorationData {
 //             values[key] = [roots[key].get_total_score(), roots[key].get_times_explored()]
 //         return values
 
-// Instead of using initial_progress, exploration data will only keep track of what happens after the start
-pub struct MonteCarloTreeSearcher {
+struct SearchConstants {
+    pub c: f64,
+    pub rollouts_per_exploration: usize,
+    pub rollouts_per_child_expansion: usize,
+    pub maximum_depth: usize,
+    pub recommendation_limit: usize,
+}
+
+struct Roller {
     best_recommendation: Vec<CommandStatistics>,
     best_score: f64,
     best_recommendation_indexes: Vec<usize>,
-    recommendation_limit: usize,
-    exploration_data: MonteCarloExplorationData,
     recommendations: Vec<CommandStatistics>,
-    start: Vec<usize>,
-    maximum_depth: usize,
-    rollouts_per_exploration: usize,
-    rollouts_per_child_expansion: usize,
-    c: f64,
-    random_number_generator: RandomNumberGenerator,
+    generator: RandomNumberGenerator,
 }
 
-impl MonteCarloTreeSearcher {
-    pub fn new(
-        recommendation_limit: usize,
-        recommendations: Vec<CommandStatistics>,
-        start: Vec<usize>,
-        max_depth: usize,
-        c: f64,
-        rollouts_per_exploration: usize,
-        rollouts_per_child_expansion: usize,
-        seed: u64,
-    ) -> Self {
-        let maximum_depth = std::cmp::min(start.len() + max_depth, recommendation_limit);
-        MonteCarloTreeSearcher {
+impl Roller {
+    fn new(recommendations: Vec<CommandStatistics>, seed: u64) -> Self {
+        Roller {
             best_recommendation: Vec::new(),
             best_score: 0.0,
             best_recommendation_indexes: Vec::new(),
-            recommendation_limit,
-            exploration_data: MonteCarloExplorationData::new(),
             recommendations,
-            start,
-            maximum_depth,
-            rollouts_per_exploration,
-            rollouts_per_child_expansion,
-            c,
-            random_number_generator: RandomNumberGenerator::new(seed),
+            generator: RandomNumberGenerator::new(seed),
         }
     }
-
-    pub fn get_best_score(&self) -> f64 {
-        self.best_score
-    }
-
-    pub fn get_best_recommendation_indexes(&self) -> &Vec<usize> {
-        &self.best_recommendation_indexes
-    }
-
-    fn simulate_play_out(&mut self, starting_path: &[usize], use_greedy: bool) {
+    fn simulate_play_out(
+        &mut self,
+        starting_path: &[usize],
+        use_greedy: bool,
+        constants: &SearchConstants,
+    ) -> f64 {
         let mut path = starting_path.to_vec();
-        let num_remaining = self.recommendation_limit - starting_path.len();
+        let num_remaining = constants.recommendation_limit - starting_path.len();
         let mut next_possible_index = *path.last().unwrap_or(&0);
         let mut last_potential_index = self.recommendations.len() - num_remaining;
         let num_random = if use_greedy {
@@ -416,7 +399,7 @@ impl MonteCarloTreeSearcher {
 
         for _ in 0..num_random {
             let choice = self
-                .random_number_generator
+                .generator
                 .next_in_range(next_possible_index, last_potential_index);
             next_possible_index = choice + 1;
             last_potential_index += 1;
@@ -426,7 +409,7 @@ impl MonteCarloTreeSearcher {
         let (potential_recommendations, score, path) = if use_greedy {
             let (potential_recommendations, score, mut path) = compute_greedy_best(
                 &self.recommendations,
-                self.recommendation_limit,
+                constants.recommendation_limit,
                 &path,
                 (next_possible_index, last_potential_index + 1),
             );
@@ -447,41 +430,128 @@ impl MonteCarloTreeSearcher {
             self.best_recommendation_indexes = path;
         }
 
-        self.exploration_data
-            .back_propagate_score(starting_path, score);
+        score
     }
 
-    fn select_starting_path(&mut self) -> Vec<usize> {
-        let mut path = self.start.clone();
-        let starting_index = {
-            let roots = self.exploration_data.get_roots();
-            if roots.is_empty() {
-                path.len()
-            } else {
-                let (index, _) = self.exploration_data.compute_best_child(None, self.c);
-                index
+    fn get_best_score(&self) -> f64 {
+        self.best_score
+    }
+
+    fn get_best_recommendation_indexes(&self) -> &Vec<usize> {
+        &self.best_recommendation_indexes
+    }
+}
+
+// Instead of using initial_progress, exploration data will only keep track of what happens after the start
+pub struct MonteCarloTreeSearcher {
+    roller: Roller,
+    start: Vec<usize>,
+    constants: SearchConstants,
+    exploration_data: MonteCarloExplorationData,
+    c: f64,
+    random_number_generator: RandomNumberGenerator,
+}
+
+fn explore_every_child(
+    path: &mut Vec<usize>,
+    data: &mut MonteCarloExplorationData,
+    roller: &mut Roller,
+    constants: &SearchConstants,
+) -> usize {
+    let start = if path.is_empty() {
+        0
+    } else {
+        *path.last().unwrap() + 1
+    };
+    let ending = roller.recommendations.len() - constants.recommendation_limit + path.len();
+    data.handle_exploration(path, ending - start);
+    for i in start..ending {
+        path.push(i);
+        let progress = data.get_root(path[0]);
+        for _ in 0..constants.rollouts_per_child_expansion {
+            let score = roller.simulate_play_out(path, false, constants);
+            progress.handle_score(score);
+            for j in 1..path.len() {
+                let progress = progress.get_child_mut(path[j]);
+                progress.handle_score(score);
             }
-        };
-        let progress = {
-            let roots = self.exploration_data.get_roots();
-            let mut progress = roots.get_mut(&starting_index).unwrap();
-            path.push(starting_index);
-            while path.len() < self.maximum_depth - 1 && progress.has_children() {
-                let (best_child, _) =
-                    MonteCarloExplorationData::compute_best_child_from_node(progress, self.c);
-                progress = progress.get_child(best_child);
-                path.push(best_child);
-            }
-            progress
-        };
-        if path.len() < self.maximum_depth - 1 && !progress.has_children() {
-            self.explore_every_child(&mut path);
+        }
+        progress.handle_exploration(constants.rollouts_per_child_expansion);
+        path.pop();
+    }
+    let progress = &data.create_initial_for_path(path);
+    MonteCarloExplorationData::compute_best_child_from_node(progress, constants.c).0
+}
+
+fn select_starting_path(
+    data: &mut MonteCarloExplorationData,
+    roller: &mut Roller,
+    start: &Vec<usize>,
+    constants: &SearchConstants,
+) -> Vec<usize> {
+    let mut path = start.clone();
+    let starting_index = {
+        let roots = data.get_roots();
+        if roots.is_empty() {
+            // This works because the starting path goes from 0 to 1 minus the length of the path. This invariant is maintained outside of the data structure.
+            path.len()
+        } else {
+            let (index, _) = data.compute_best_child(None, constants.c);
+            index
+        }
+    };
+    let has_children = {
+        let roots = data.get_roots();
+        let mut progress = roots.get(&starting_index).unwrap();
+        path.push(starting_index);
+        while path.len() < constants.maximum_depth - 1 && progress.has_children() {
             let (best_child, _) =
-                MonteCarloExplorationData::compute_best_child_from_node(progress, self.c);
+                MonteCarloExplorationData::compute_best_child_from_node(progress, constants.c);
+            progress = progress.get_child(best_child);
             path.push(best_child);
         }
-        path
+        progress.has_children()
+    };
+    if path.len() < constants.maximum_depth - 1 && !has_children {
+        let best_child = explore_every_child(&mut path, data, roller, constants);
+        path.push(best_child);
+    }
+    path
+}
+
+impl MonteCarloTreeSearcher {
+    pub fn new(
+        recommendation_limit: usize,
+        recommendations: Vec<CommandStatistics>,
+        start: Vec<usize>,
+        max_depth: usize,
+        c: f64,
+        rollouts_per_exploration: usize,
+        rollouts_per_child_expansion: usize,
+        seed: u64,
+    ) -> Self {
+        let maximum_depth = std::cmp::min(start.len() + max_depth, recommendation_limit);
+        MonteCarloTreeSearcher {
+            roller: Roller::new(recommendations, seed),
+            exploration_data: MonteCarloExplorationData::new(),
+            start,
+            constants: SearchConstants {
+                c,
+                rollouts_per_exploration,
+                rollouts_per_child_expansion,
+                maximum_depth,
+                recommendation_limit,
+            },
+            c,
+            random_number_generator: RandomNumberGenerator::new(seed),
+        }
     }
 
-    fn explore_every_child(&mut self, starting_path: &mut Vec<usize>) {}
+    pub fn get_best_score(&self) -> f64 {
+        self.roller.get_best_score()
+    }
+
+    pub fn get_best_recommendation_indexes(&self) -> &Vec<usize> {
+        self.roller.get_best_recommendation_indexes()
+    }
 }
