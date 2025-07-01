@@ -113,15 +113,21 @@ pub fn compute_heuristic_recommendation_score(recommendations: &Vec<CommandStati
     )
 }
 
-fn compute_greedy_best_in_parallel(
+pub fn compute_greedy_best_in_parallel(
     recommendations: &Vec<CommandStatistics>,
     max_number_of_recommendations: usize,
-) -> Vec<CommandStatistics> {
+    start: &Vec<usize>,
+) -> (Vec<CommandStatistics>, f64) {
     let mut pool: pool::ThreadPool<(usize, f64)> = pool::ThreadPool::create_with_max_threads();
     let mut best_recommendations = Vec::new();
     let mut consumed_indexes = HashSet::new();
+    for i in start.iter() {
+        best_recommendations.push(recommendations[*i].clone());
+        consumed_indexes.insert(*i);
+    }
     let recommendations = recommendations.clone();
     let recommendations = Arc::new(recommendations);
+    let mut final_score = 0.0;
     while best_recommendations.len() < max_number_of_recommendations
         && best_recommendations.len() < recommendations.len()
     {
@@ -156,11 +162,12 @@ fn compute_greedy_best_in_parallel(
             });
             starting_index = target_index;
         }
-        let (best_index, _best_score) = pool.reduce(|a, b| if a.1 > b.1 { a } else { b });
+        let (best_index, best_score) = pool.reduce(|a, b| if a.1 > b.1 { a } else { b });
         best_recommendations.push(recommendations[best_index].clone());
         consumed_indexes.insert(best_index);
+        final_score = best_score;
     }
-    best_recommendations
+    (best_recommendations, final_score)
 }
 
 pub fn compute_greedy_best(
@@ -390,7 +397,7 @@ pub fn find_best(
         "Narrowed it down to {} recommendations",
         recommendations.len()
     );
-    compute_greedy_best_in_parallel(&recommendations, max_number_of_recommendations)
+    compute_greedy_best_in_parallel(&recommendations, max_number_of_recommendations, &Vec::new()).0
 }
 
 #[cfg(test)]

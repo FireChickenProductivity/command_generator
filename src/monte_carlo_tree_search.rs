@@ -1,7 +1,9 @@
 use crate::pool::ThreadPool;
 use crate::random::RandomNumberGenerator;
 use crate::recommendation_generation::CommandStatistics;
-use crate::recommendation_scoring::{compute_greedy_best, compute_heuristic_recommendation_score};
+use crate::recommendation_scoring::{
+    compute_greedy_best, compute_greedy_best_in_parallel, compute_heuristic_recommendation_score,
+};
 use std::collections::HashMap;
 
 #[derive(Clone)]
@@ -476,4 +478,30 @@ impl MonteCarloTreeSearcher {
         }
         values
     }
+}
+
+fn perform_double_greedy(
+    indexes: Vec<usize>,
+    search_start_index: usize,
+    recommendations: &Vec<CommandStatistics>,
+    recommendation_limit: usize,
+) -> (f64, Vec<usize>) {
+    let mut best_score = -1.0;
+    let mut best_index = 0;
+    let mut best_indexes = indexes.clone();
+
+    for i in search_start_index..recommendations.len() {
+        best_indexes.push(i);
+        let (_, score) =
+            compute_greedy_best_in_parallel(recommendations, recommendation_limit, &best_indexes);
+        if score > best_score {
+            best_score = score;
+            best_index = i;
+        }
+        best_indexes.pop();
+    }
+
+    println!("best score from double greedy: {}", best_score);
+    best_indexes.push(best_index);
+    (best_score, best_indexes)
 }
