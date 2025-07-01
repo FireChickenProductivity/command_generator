@@ -4,6 +4,7 @@ use crate::recommendation_generation::CommandStatistics;
 use crate::recommendation_scoring::{
     compute_greedy_best, compute_greedy_best_in_parallel, compute_heuristic_recommendation_score,
 };
+use core::panic;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -110,9 +111,10 @@ impl MonteCarloExplorationData {
     pub fn back_propagate_score(&mut self, path: &[usize], score: f64) {
         if let Some(root) = self.roots.get_mut(&path[0]) {
             root.handle_score(score);
+            let mut progress = root;
             for &index in &path[1..] {
-                let child = root.get_child_mut(index);
-                child.handle_score(score);
+                progress = progress.get_child_mut(index);
+                progress.handle_score(score);
             }
         } else {
             panic!("Root node not found for path: {:?}", path);
@@ -150,6 +152,7 @@ impl MonteCarloExplorationData {
     ) -> (usize, f64) {
         let mut best_value = 0.0;
         let mut best_index = 0;
+        let mut ran = false;
         for child in children {
             let value = child.get_score() / best_score
                 + c * ((times_parent_explored as f64).ln() / child.get_times_explored() as f64)
@@ -158,6 +161,10 @@ impl MonteCarloExplorationData {
                 best_index = child.get_index();
                 best_value = value;
             }
+            ran = true;
+        }
+        if !ran {
+            panic!("No children found to compute best child from");
         }
         (best_index, best_value)
     }
@@ -350,23 +357,25 @@ fn explore_every_child(
     let starting_path_index = if start_length < path.len() {
         // I only need to handle counting exploration when we are past the root
         data.handle_exploration(&path[start_length..], ending - start);
-        path.len()
+        start_length
     } else {
+        data.increment_total_explored(ending - start);
         0
     };
 
     for i in start..ending {
         path.push(i);
-        let progress = data.get_root(path[starting_path_index]);
+
         for _ in 0..constants.rollouts_per_child_expansion {
+            let mut progress = data.get_root(path[starting_path_index]);
             let score = roller.simulate_play_out(path, false, constants);
             progress.handle_score(score);
             for j in starting_path_index + 1..path.len() {
-                let progress = progress.get_child_mut(path[j]);
+                progress = progress.get_child_mut(path[j]);
                 progress.handle_score(score);
             }
+            progress.handle_exploration(1);
         }
-        progress.handle_exploration(constants.rollouts_per_child_expansion);
         path.pop();
     }
     if path.len() > start_length {
@@ -405,6 +414,13 @@ fn select_starting_path(
             while path.len() < constants.maximum_depth - 1 && progress.has_children() {
                 let (best_child, _) =
                     MonteCarloExplorationData::compute_best_child_from_node(progress, constants.c);
+                if !progress.get_children_dictionary().contains_key(&best_child) {
+                    panic!(
+                        "Child node with index {} not found in progress: {:?}",
+                        best_child,
+                        progress.get_index()
+                    );
+                }
                 progress = progress.get_child(best_child);
                 path.push(best_child);
             }
