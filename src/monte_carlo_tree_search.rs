@@ -151,7 +151,7 @@ impl MonteCarloExplorationData {
         c: f64,
     ) -> (usize, f64) {
         let mut best_value = 0.0;
-        let mut best_index = 0;
+        let mut best_index = usize::MAX;
         let mut ran = false;
         for child in children {
             let value = child.get_score() / best_score
@@ -161,11 +161,21 @@ impl MonteCarloExplorationData {
                 best_index = child.get_index();
                 best_value = value;
             }
+            if value < 0.0 {
+                panic!(
+                    "Child node with index {} has a negative value: {}",
+                    child.get_index(),
+                    value
+                );
+            }
             ran = true;
         }
         if !ran {
             panic!("No children found to compute best child from");
         }
+        // if best_index == usize::MAX {
+        //     panic!("No best index found, this should not happen");
+        // }
         (best_index, best_value)
     }
 
@@ -354,13 +364,12 @@ fn explore_every_child(
         *path.last().unwrap() + 1
     };
     let ending = roller.recommendations.len() - constants.recommendation_limit + path.len();
-    let starting_path_index = if start_length < path.len() {
+    let starting_path_index = start_length;
+    if start_length < path.len() {
         // I only need to handle counting exploration when we are past the root
         data.handle_exploration(&path[start_length..], ending - start);
-        start_length
     } else {
         data.increment_total_explored(ending - start);
-        0
     };
 
     for i in start..ending {
@@ -414,6 +423,9 @@ fn select_starting_path(
             while path.len() < constants.maximum_depth - 1 && progress.has_children() {
                 let (best_child, _) =
                     MonteCarloExplorationData::compute_best_child_from_node(progress, constants.c);
+                if best_child == usize::MAX {
+                    panic!("No best index found, this should not happen");
+                }
                 if !progress.get_children_dictionary().contains_key(&best_child) {
                     panic!(
                         "Child node with index {} not found in progress: {:?}",
@@ -429,6 +441,9 @@ fn select_starting_path(
     };
     if path.len() < constants.maximum_depth - 1 && !has_children {
         let best_child = explore_every_child(&mut path, data, roller, constants, start.len());
+        if best_child == usize::MAX {
+            panic!("No best index found, this should not happen");
+        }
         path.push(best_child);
     }
     path

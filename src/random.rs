@@ -32,7 +32,7 @@ impl RandomNumberGenerator {
 
     pub fn next_in_range(&mut self, start: usize, end: usize) -> usize {
         if start >= end {
-            panic!("Start must be less than end.");
+            panic!("Start {} must be less than end {}.", start, end);
         }
         let range = end - start;
         let random_value = self.next() as usize % range;
