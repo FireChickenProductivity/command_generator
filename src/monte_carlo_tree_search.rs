@@ -500,9 +500,22 @@ impl<'a> MonteCarloTreeSearcher<'a> {
             .handle_exploration(&path_after_start, self.constants.rollouts_per_exploration);
     }
 
+    pub fn explore_ending_rollouts(&mut self) {
+        for _ in 0..self.constants.rollouts_per_exploration {
+            self.roller
+                .simulate_play_out(&self.start, true, &self.constants);
+        }
+    }
+
     pub fn explore_solutions(&mut self, num_trials: usize) {
-        for _ in 0..num_trials {
-            self.explore_solution();
+        if self.start.len() == self.constants.maximum_depth - 1 {
+            for _ in 0..num_trials {
+                self.explore_ending_rollouts();
+            }
+        } else {
+            for _ in 0..num_trials {
+                self.explore_solution();
+            }
         }
     }
 
@@ -579,8 +592,7 @@ fn possibly_perform_parallel_monte_carlo_tree_search(
     number_of_trials: usize,
     seed: u64,
 ) -> (f64, Vec<usize>, usize) {
-    // let num_workers = compute_parallelism();
-    let num_workers = 1;
+    let num_workers = compute_parallelism();
     let trials_per_worker = if num_workers == 1 {
         number_of_trials
     } else {
@@ -668,12 +680,23 @@ pub fn perform_monte_carlo_tree_search(
             let last_recommendations: Vec<CommandStatistics> =
                 start.iter().map(|&j| recommendations[j].clone()).collect();
             let current_score = compute_heuristic_recommendation_score(&last_recommendations);
-            recommendations.retain(|r| {
-                let mut new_recommendations = last_recommendations.clone();
-                new_recommendations.push(r.clone());
-                let new_score = compute_heuristic_recommendation_score(&new_recommendations);
-                new_score >= current_score
-            });
+            *recommendations = recommendations
+                .iter()
+                .enumerate()
+                .filter_map(|(index, r)| {
+                    if start.contains(&index) {
+                        return Some(r.clone()); // Skip already selected recommendations
+                    }
+                    let mut new_recommendations = last_recommendations.clone();
+                    new_recommendations.push(r.clone());
+                    let new_score = compute_heuristic_recommendation_score(&new_recommendations);
+                    if new_score >= current_score {
+                        Some(r.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>();
             if recommendations.len() < recommendation_limit - i {
                 println!("Ending tree search early");
                 break;
@@ -689,7 +712,7 @@ pub fn perform_monte_carlo_tree_search(
                 let (score, best_indexes) = perform_double_greedy(
                     start.clone(),
                     start.len(),
-                    recommendations,
+                    &recommendations,
                     recommendation_limit,
                 );
                 let best_index = best_indexes[i];
