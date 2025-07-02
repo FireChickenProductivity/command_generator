@@ -5,10 +5,7 @@ use crate::recommendation_scoring::{
     compute_greedy_best, compute_greedy_best_in_parallel, compute_heuristic_recommendation_score,
 };
 use core::panic;
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
+use std::{collections::HashMap, sync::Arc};
 
 #[derive(Clone)]
 pub struct NodeData {

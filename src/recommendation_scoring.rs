@@ -139,11 +139,10 @@ pub fn compute_greedy_best_in_parallel(
             let start = starting_index;
             let recommendations_clone = Arc::clone(&recommendations);
             let consumed_clone = Arc::clone(&consumed_arc);
-            let best_recommendations_clone = best_recommendations.clone();
+            let mut current_recommendations = best_recommendations.clone();
             pool.execute(move || {
                 let mut best_score = f64::NEG_INFINITY;
                 let mut best_index = 0;
-                let mut current_recommendations = best_recommendations_clone.clone();
                 for i in start..target_index {
                     if !consumed_clone.contains(&i) {
                         let recommendation = &recommendations_clone[i];
