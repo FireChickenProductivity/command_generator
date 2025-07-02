@@ -209,8 +209,7 @@ pub struct PotentialAbstractCommandInformation {
 impl PotentialAbstractCommandInformation {
     pub fn new(instantiation: AbstractCommandInstantiation) -> Self {
         let actions = instantiation.command_chain.get_command().get_actions();
-        let mut statistics = CommandStatistics::new_abstract(actions.clone());
-        statistics.number_of_words_saved = instantiation.words_saved;
+        let statistics = CommandStatistics::new_abstract(actions.clone());
         let mut result = Self {
             statistics,
             chain_handler: ChainHandler::new(),
@@ -728,7 +727,7 @@ fn process_concrete_command_usage(
     } else {
         let mut concrete_info =
             PotentialCommandInformation::new(command_chain.get_command().get_actions().clone());
-        concrete_info.process_relevant_usage(command_chain);
+        concrete_info.process_usage(command_chain);
         concrete_commands.insert(representation, concrete_info);
     }
 }
