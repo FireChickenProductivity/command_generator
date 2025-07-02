@@ -596,7 +596,7 @@ fn possibly_perform_parallel_monte_carlo_tree_search(
     let trials_per_worker = if num_workers == 1 {
         number_of_trials
     } else {
-        ((1.7 * number_of_trials as f64 / num_workers as f64).round() as usize).max(10usize)
+        ((number_of_trials as f64 / num_workers as f64).round() as usize).max(10usize)
     };
 
     if num_workers == 1 {
@@ -726,6 +726,7 @@ pub fn perform_monte_carlo_tree_search(
                     seed as u64,
                 )
             };
+        println!("Round {} score: {}", i + 1, score);
         if score > best_score {
             best_score = score;
             best = indexes

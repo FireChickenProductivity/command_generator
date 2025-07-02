@@ -91,10 +91,8 @@ fn score_recommendations_weighting_by_inverse_action_frequency(
             let mut weight = 0.0;
             for action in actions {
                 let representation = action.to_json();
-                weight += 1.0
-                    / (*num_commands_including_action
-                        .get(&representation)
-                        .unwrap_or(&1)) as f64;
+                weight +=
+                    1.0 / (*num_commands_including_action.get(&representation).unwrap()) as f64;
             }
             weight /= actions.len() as f64;
             score += weight * recommendation.number_of_words_saved as f64;
