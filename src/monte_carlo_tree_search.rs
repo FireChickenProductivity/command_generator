@@ -423,16 +423,7 @@ fn select_starting_path(
             while path.len() < constants.maximum_depth - 1 && progress.has_children() {
                 let (best_child, _) =
                     MonteCarloExplorationData::compute_best_child_from_node(progress, constants.c);
-                if best_child == usize::MAX {
-                    panic!("No best index found, this should not happen");
-                }
-                if !progress.get_children_dictionary().contains_key(&best_child) {
-                    panic!(
-                        "Child node with index {} not found in progress: {:?}",
-                        best_child,
-                        progress.get_index()
-                    );
-                }
+
                 progress = progress.get_child(best_child);
                 path.push(best_child);
             }
@@ -441,9 +432,6 @@ fn select_starting_path(
     };
     if path.len() < constants.maximum_depth - 1 && !has_children {
         let best_child = explore_every_child(&mut path, data, roller, constants, start.len());
-        if best_child == usize::MAX {
-            panic!("No best index found, this should not happen");
-        }
         path.push(best_child);
     }
     path
@@ -465,7 +453,7 @@ impl<'a> MonteCarloTreeSearcher<'a> {
             constants: SearchConstants {
                 c: 0.000001,
                 rollouts_per_exploration: 10,
-                rollouts_per_child_expansion: 1,
+                rollouts_per_child_expansion: 3,
                 maximum_depth: max_remaining_depth,
                 recommendation_limit,
             },
@@ -664,12 +652,17 @@ fn possibly_perform_parallel_monte_carlo_tree_search(
     }
 }
 
+fn compute_number_of_trials(
+    number_of_recommendations: usize,
+    recommendation_limit: usize,
+) -> usize {
+    (2.5 * number_of_recommendations as f64 / recommendation_limit as f64).round() as usize
+}
+
 pub fn perform_monte_carlo_tree_search(
     recommendations: &mut Vec<CommandStatistics>,
     recommendation_limit: usize,
 ) -> (Vec<CommandStatistics>, f64) {
-    let number_of_trials =
-        (2.0 * recommendations.len() as f64 / recommendation_limit as f64).round() as usize;
     let mut start: Vec<usize> = Vec::new();
     let seed = 0;
     let mut best_score = 0.0;
@@ -706,6 +699,8 @@ pub fn perform_monte_carlo_tree_search(
                 break;
             }
         }
+        let number_of_trials =
+            compute_number_of_trials(recommendations.len(), recommendation_limit);
         println!(
             "Running round {} of tree search on {} recommendations",
             i + 1,
