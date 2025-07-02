@@ -391,8 +391,7 @@ pub fn find_best(
     if max_number_of_recommendations >= recommendations.len() {
         return recommendations.clone();
     }
-    let mut recommendations =
-        filter_out_recommendations_redundant_smaller_commands(recommendations);
+    let recommendations = filter_out_recommendations_redundant_smaller_commands(recommendations);
     println!(
         "Narrowed it down to {} recommendations",
         recommendations.len()
