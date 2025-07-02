@@ -659,8 +659,34 @@ fn compute_number_of_trials(
     (2.5 * number_of_recommendations as f64 / recommendation_limit as f64).round() as usize
 }
 
+fn filter_commands(
+    start: &Vec<usize>,
+    recommendations: &Vec<CommandStatistics>,
+) -> Vec<CommandStatistics> {
+    let last_recommendations: Vec<CommandStatistics> =
+        start.iter().map(|&j| recommendations[j].clone()).collect();
+    let current_score = compute_heuristic_recommendation_score(&last_recommendations);
+    recommendations
+        .iter()
+        .enumerate()
+        .filter_map(|(index, r)| {
+            if start.contains(&index) {
+                return Some(r.clone()); // Keep already selected recommendations
+            }
+            let mut new_recommendations = last_recommendations.clone();
+            new_recommendations.push(r.clone());
+            let new_score = compute_heuristic_recommendation_score(&new_recommendations);
+            if new_score >= current_score {
+                Some(r.clone())
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>()
+}
+
 pub fn perform_monte_carlo_tree_search(
-    recommendations: &mut Vec<CommandStatistics>,
+    mut recommendations: Vec<CommandStatistics>,
     recommendation_limit: usize,
 ) -> (Vec<CommandStatistics>, f64) {
     let mut start: Vec<usize> = Vec::new();
@@ -674,26 +700,7 @@ pub fn perform_monte_carlo_tree_search(
     });
     for i in 0..recommendation_limit - 1 {
         if i > 0 {
-            let last_recommendations: Vec<CommandStatistics> =
-                start.iter().map(|&j| recommendations[j].clone()).collect();
-            let current_score = compute_heuristic_recommendation_score(&last_recommendations);
-            *recommendations = recommendations
-                .iter()
-                .enumerate()
-                .filter_map(|(index, r)| {
-                    if start.contains(&index) {
-                        return Some(r.clone()); // Keep already selected recommendations
-                    }
-                    let mut new_recommendations = last_recommendations.clone();
-                    new_recommendations.push(r.clone());
-                    let new_score = compute_heuristic_recommendation_score(&new_recommendations);
-                    if new_score >= current_score {
-                        Some(r.clone())
-                    } else {
-                        None
-                    }
-                })
-                .collect::<Vec<_>>();
+            recommendations = filter_commands(&start, &recommendations);
             if recommendations.len() < recommendation_limit - i {
                 println!("Ending tree search early");
                 break;

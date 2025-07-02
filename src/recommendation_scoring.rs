@@ -405,7 +405,7 @@ pub fn find_best(
     );
     println!("Greedy score: {}", score);
     let (tree_recommendations, tree_score) =
-        perform_monte_carlo_tree_search(&mut recommendations, max_number_of_recommendations);
+        perform_monte_carlo_tree_search(recommendations.clone(), max_number_of_recommendations);
     println!(
         "Monte Carlo Tree Search score: {} vs greedy score {}",
         tree_score, score
