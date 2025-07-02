@@ -215,13 +215,14 @@ pub fn compute_greedy_best(
 fn compute_greedy_best_from_scratch(
     recommendations: &Vec<CommandStatistics>,
     max_number_of_recommendations: usize,
-) -> (Vec<CommandStatistics>, f64, Vec<usize>) {
-    compute_greedy_best(
+) -> (Vec<CommandStatistics>, f64) {
+    let (best, score, _) = compute_greedy_best(
         recommendations,
         max_number_of_recommendations,
         &vec![],
         (0, recommendations.len()),
-    )
+    );
+    (best, score)
 }
 
 fn compute_string_subsequences(text: &str) -> Vec<String> {
