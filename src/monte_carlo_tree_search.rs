@@ -723,25 +723,24 @@ pub fn perform_monte_carlo_tree_search(
             i + 1,
             recommendations.len()
         );
-        let (score, indexes, best_index) =
-            if i == recommendation_limit - 2 && number_of_trials * 2 >= recommendations.len() {
-                let (score, best_indexes) = perform_double_greedy(
-                    start.clone(),
-                    start.len(),
-                    &recommendations,
-                    recommendation_limit,
-                );
-                let best_index = best_indexes[i];
-                (score, best_indexes, best_index)
-            } else {
-                possibly_perform_parallel_monte_carlo_tree_search(
-                    &recommendations,
-                    &start,
-                    recommendation_limit,
-                    number_of_trials,
-                    seed as u64,
-                )
-            };
+        let (score, indexes, best_index) = if i == recommendation_limit - 2 {
+            let (score, best_indexes) = perform_double_greedy(
+                start.clone(),
+                start.len(),
+                &recommendations,
+                recommendation_limit,
+            );
+            let best_index = best_indexes[i];
+            (score, best_indexes, best_index)
+        } else {
+            possibly_perform_parallel_monte_carlo_tree_search(
+                &recommendations,
+                &start,
+                recommendation_limit,
+                number_of_trials,
+                seed as u64,
+            )
+        };
         println!("Round {} score: {}", i + 1, score);
         if score > best_score {
             best_score = score;
