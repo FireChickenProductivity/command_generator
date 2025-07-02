@@ -618,10 +618,14 @@ fn possibly_perform_parallel_monte_carlo_tree_search(
         let start = Arc::new(start.clone());
         let mut best_score = 0.0;
         let mut best_recommendation_indexes = Vec::new();
-        for i in 0..num_workers {
+        let mut local_random_generator = RandomNumberGenerator::new(0);
+        let mut current_seed = seed;
+        for _ in 0..num_workers {
             let recommendations_copy = Arc::clone(&recommendations_copy);
-            let start = Arc::clone(&start);
-            let thread_seed = seed + i as u64;
+            let start: Arc<Vec<usize>> = Arc::clone(&start);
+            current_seed =
+                current_seed.wrapping_add(local_random_generator.next_in_range(1, 10000) as u64);
+            let thread_seed = current_seed;
 
             pool.execute(move || {
                 let searcher = perform_worker_monte_carlo_tree_search(
@@ -665,7 +669,7 @@ pub fn perform_monte_carlo_tree_search(
     recommendation_limit: usize,
 ) -> (Vec<CommandStatistics>, f64) {
     let number_of_trials =
-        (recommendations.len() as f64 / recommendation_limit as f64).round() as usize;
+        (2.0 * recommendations.len() as f64 / recommendation_limit as f64).round() as usize;
     let mut start: Vec<usize> = Vec::new();
     let seed = 0;
     let mut best_score = 0.0;

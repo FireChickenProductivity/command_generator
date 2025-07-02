@@ -406,7 +406,10 @@ pub fn find_best(
     println!("Greedy score: {}", score);
     let (tree_recommendations, tree_score) =
         perform_monte_carlo_tree_search(&mut recommendations, max_number_of_recommendations);
-    println!("Monte Carlo Tree Search score: {}", tree_score);
+    println!(
+        "Monte Carlo Tree Search score: {} vs greedy score {}",
+        tree_score, score
+    );
     if tree_score > score {
         return tree_recommendations;
     }
@@ -455,7 +458,7 @@ mod tests {
         ];
         let filtered =
             filter_out_recommendations_redundant_smaller_commands(recommendations.clone());
-        let (best, _, _) = compute_greedy_best_from_scratch(&filtered, 2);
+        let (best, _) = compute_greedy_best_from_scratch(&filtered, 2);
         assert_eq!(best.len(), 2);
         assert_eq!(best[1].actions, recommendations[0].actions);
         assert_eq!(best[0].actions, recommendations[2].actions);
