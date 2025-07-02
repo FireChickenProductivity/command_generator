@@ -689,7 +689,7 @@ pub fn perform_monte_carlo_tree_search(
                 .enumerate()
                 .filter_map(|(index, r)| {
                     if start.contains(&index) {
-                        return Some(r.clone()); // Skip already selected recommendations
+                        return Some(r.clone()); // Keep already selected recommendations
                     }
                     let mut new_recommendations = last_recommendations.clone();
                     new_recommendations.push(r.clone());
