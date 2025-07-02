@@ -664,7 +664,7 @@ fn filter_commands(
     recommendations: &Vec<CommandStatistics>,
 ) -> Vec<CommandStatistics> {
     let last_recommendations: Vec<CommandStatistics> =
-        start.iter().map(|&j| recommendations[j].clone()).collect();
+        compute_recommendations_for_indexes(recommendations, start);
     let current_score = compute_heuristic_recommendation_score(&last_recommendations);
     recommendations
         .iter()
@@ -683,6 +683,16 @@ fn filter_commands(
             }
         })
         .collect::<Vec<_>>()
+}
+
+fn compute_recommendations_for_indexes(
+    recommendations: &Vec<CommandStatistics>,
+    indexes: &Vec<usize>,
+) -> Vec<CommandStatistics> {
+    indexes
+        .iter()
+        .map(|&i| recommendations[i].clone())
+        .collect()
 }
 
 pub fn perform_monte_carlo_tree_search(
@@ -735,10 +745,7 @@ pub fn perform_monte_carlo_tree_search(
         println!("Round {} score: {}", i + 1, score);
         if score > best_score {
             best_score = score;
-            best = indexes
-                .iter()
-                .map(|&j| recommendations[j].clone())
-                .collect();
+            best = compute_recommendations_for_indexes(&recommendations, &indexes);
             println!("New best result {}", best_score);
         }
         start.push(i);
