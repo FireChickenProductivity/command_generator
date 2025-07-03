@@ -81,11 +81,7 @@ fn score_recommendations_weighting_by_inverse_action_frequency(
             let inserted_text = get_insert_text_from_insert_only_actions(actions);
             let similarity =
                 compute_max_nonidentical_prefix_or_suffix_similarity(inserted_text, single_inserts);
-            let weight = if similarity == 0 {
-                1.0
-            } else {
-                (inserted_text.len() - similarity) as f64 / inserted_text.len() as f64
-            };
+            let weight = 1.0 - (similarity as f64 / inserted_text.len() as f64);
             score += weight * recommendation.number_of_words_saved as f64;
         } else {
             let mut weight = 0.0;
