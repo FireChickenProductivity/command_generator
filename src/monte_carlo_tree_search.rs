@@ -687,10 +687,17 @@ fn compute_recommendations_for_indexes(
 
 pub fn perform_monte_carlo_tree_search(
     mut recommendations: Vec<CommandStatistics>,
-    mut start: Vec<usize>,
+    given_start: &Vec<usize>,
     recommendation_limit: usize,
 ) -> (Vec<CommandStatistics>, f64) {
+    let mut start = Vec::new();
+    for i in given_start {
+        let next_index = start.len();
+        recommendations.swap(*i, next_index);
+        start.push(next_index);
+    }
     let number_of_given_recommendations = start.len();
+
     let seed = 0;
     let mut best_score = 0.0;
     let mut best: Vec<CommandStatistics> = Vec::new();

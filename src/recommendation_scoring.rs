@@ -394,7 +394,7 @@ pub fn find_best(
     if max_number_of_recommendations - start.len() > 1 {
         let (tree_recommendations, tree_score) = perform_monte_carlo_tree_search(
             recommendations.clone(),
-            start.clone(),
+            start,
             max_number_of_recommendations,
         );
         println!(
