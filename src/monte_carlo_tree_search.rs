@@ -450,7 +450,7 @@ impl<'a> MonteCarloTreeSearcher<'a> {
             constants: SearchConstants {
                 c: 0.000001,
                 rollouts_per_exploration: 10,
-                rollouts_per_child_expansion: 3,
+                rollouts_per_child_expansion: 1,
                 maximum_depth: max_remaining_depth,
                 recommendation_limit,
             },
@@ -581,7 +581,7 @@ fn possibly_perform_parallel_monte_carlo_tree_search(
     let trials_per_worker = if num_workers == 1 {
         number_of_trials
     } else {
-        ((number_of_trials as f64 / num_workers as f64).round() as usize).max(10usize)
+        ((1.7 * number_of_trials as f64 / num_workers as f64).round() as usize).max(10usize)
     };
 
     if num_workers == 1 {
@@ -649,13 +649,6 @@ fn possibly_perform_parallel_monte_carlo_tree_search(
     }
 }
 
-fn compute_number_of_trials(
-    number_of_recommendations: usize,
-    recommendation_limit: usize,
-) -> usize {
-    (2.5 * number_of_recommendations as f64 / recommendation_limit as f64).round() as usize
-}
-
 fn filter_commands(
     start: &Vec<usize>,
     recommendations: &Vec<CommandStatistics>,
@@ -705,6 +698,8 @@ pub fn perform_monte_carlo_tree_search(
             .partial_cmp(&a.number_of_words_saved)
             .unwrap()
     });
+    let number_of_trials =
+        (recommendations.len() as f64 / recommendation_limit as f64).round() as usize;
     for i in 0..recommendation_limit - 1 {
         if i > 0 {
             recommendations = filter_commands(&start, &recommendations);
@@ -713,8 +708,6 @@ pub fn perform_monte_carlo_tree_search(
                 break;
             }
         }
-        let number_of_trials =
-            compute_number_of_trials(recommendations.len(), recommendation_limit);
         println!(
             "Running round {} of tree search on {} recommendations",
             i + 1,
