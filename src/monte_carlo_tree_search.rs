@@ -287,7 +287,10 @@ impl<'a> Roller<'a> {
     ) -> f64 {
         let mut path = starting_path.to_vec();
         let num_remaining = constants.recommendation_limit - starting_path.len();
-        let mut next_possible_index = *path.last().unwrap_or(&0);
+        let mut next_possible_index = match path.last() {
+            Some(&last) => last + 1,
+            None => 0,
+        };
         let mut last_potential_index = self.recommendations.len() - num_remaining;
         let num_random = if use_greedy {
             std::cmp::max(num_remaining - 1, 0)
@@ -743,6 +746,7 @@ pub fn perform_monte_carlo_tree_search(
         if score > best_score {
             best_score = score;
             best = compute_recommendations_for_indexes(&recommendations, &indexes);
+            println!("best length no greedy: {}", best.len());
             println!("New best result {}", best_score);
         }
         start.push(i);
@@ -754,9 +758,10 @@ pub fn perform_monte_carlo_tree_search(
         if greedy_score > best_score {
             best_score = greedy_score;
             best = greedy_result;
+            println!("best length: {}", best.len());
             println!("Got better result with greedy {}", best_score);
         }
     }
-
+    println!("best length: {}", best.len());
     (best, best_score)
 }

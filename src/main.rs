@@ -66,6 +66,7 @@ fn find_best_until_user_satisfied(
     let mut to_keep = ActionSet::new();
     loop {
         best = find_best(recommendations.clone(), &start, number_of_recommendations);
+        assert!(best.len() == number_of_recommendations);
         let mut to_remove = ActionSet::new();
         for recommendation in best.iter() {
             if !to_keep.contains(&recommendation.actions) {
