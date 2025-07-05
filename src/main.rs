@@ -76,6 +76,14 @@ fn main() {
             );
             println!("Created {} recommendations.", recommendations.len());
             if parameters.number_of_recommendations > 0 {
+                recommendations =
+                    recommendation_scoring::filter_out_recommendations_redundant_smaller_commands(
+                        recommendations,
+                    );
+                println!(
+                    "Narrowed it down to {} recommendations",
+                    recommendations.len()
+                );
                 recommendations = find_best(recommendations, parameters.number_of_recommendations);
             }
             create_sorted_info(&mut recommendations);

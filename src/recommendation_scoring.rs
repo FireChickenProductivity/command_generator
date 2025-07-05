@@ -351,7 +351,7 @@ fn find_redundant_commands_from_command(
     redundant
 }
 
-fn filter_out_recommendations_redundant_smaller_commands(
+pub fn filter_out_recommendations_redundant_smaller_commands(
     recommendations: Vec<CommandStatistics>,
 ) -> Vec<CommandStatistics> {
     // For every command that is a shorter version of another command but is not used any more times: remove it
@@ -387,11 +387,6 @@ pub fn find_best(
     if max_number_of_recommendations >= recommendations.len() {
         return recommendations.clone();
     }
-    let recommendations = filter_out_recommendations_redundant_smaller_commands(recommendations);
-    println!(
-        "Narrowed it down to {} recommendations",
-        recommendations.len()
-    );
     let (best_recommendations, score) = compute_greedy_best_in_parallel(
         &recommendations,
         max_number_of_recommendations,
