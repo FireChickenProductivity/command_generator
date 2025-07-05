@@ -36,6 +36,7 @@ fn print_record(record: Result<Vec<Entry>, String>) {
 
 fn find_best(
     recommendations: Vec<recommendation_generation::CommandStatistics>,
+    start: &Vec<usize>,
     number_of_recommendations: usize,
 ) -> Vec<recommendation_generation::CommandStatistics> {
     println!(
@@ -43,8 +44,11 @@ fn find_best(
         number_of_recommendations
     );
     let start_time = Instant::now();
-    let recommendations =
-        recommendation_scoring::find_best(recommendations, number_of_recommendations as usize);
+    let recommendations = recommendation_scoring::find_best(
+        recommendations,
+        start,
+        number_of_recommendations as usize,
+    );
     println!(
         "Time taken to find best recommendations: {:.3?}",
         start_time.elapsed()
@@ -84,7 +88,11 @@ fn main() {
                     "Narrowed it down to {} recommendations",
                     recommendations.len()
                 );
-                recommendations = find_best(recommendations, parameters.number_of_recommendations);
+                recommendations = find_best(
+                    recommendations,
+                    &Vec::new(),
+                    parameters.number_of_recommendations,
+                );
             }
             create_sorted_info(&mut recommendations);
             let file_name = format!("recommendations {}.txt", compute_timestamp());

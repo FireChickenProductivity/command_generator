@@ -382,16 +382,14 @@ pub fn filter_out_recommendations_redundant_smaller_commands(
 
 pub fn find_best(
     recommendations: Vec<CommandStatistics>,
+    start: &Vec<usize>,
     max_number_of_recommendations: usize,
 ) -> Vec<CommandStatistics> {
     if max_number_of_recommendations >= recommendations.len() {
         return recommendations.clone();
     }
-    let (best_recommendations, score) = compute_greedy_best_in_parallel(
-        &recommendations,
-        max_number_of_recommendations,
-        &Vec::new(),
-    );
+    let (best_recommendations, score) =
+        compute_greedy_best_in_parallel(&recommendations, max_number_of_recommendations, start);
     println!("Greedy score: {}", score);
     let (tree_recommendations, tree_score) =
         perform_monte_carlo_tree_search(recommendations.clone(), max_number_of_recommendations);
