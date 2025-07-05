@@ -687,9 +687,9 @@ fn compute_recommendations_for_indexes(
 
 pub fn perform_monte_carlo_tree_search(
     mut recommendations: Vec<CommandStatistics>,
+    mut start: Vec<usize>,
     recommendation_limit: usize,
 ) -> (Vec<CommandStatistics>, f64) {
-    let mut start: Vec<usize> = Vec::new();
     let seed = 0;
     let mut best_score = 0.0;
     let mut best: Vec<CommandStatistics> = Vec::new();
