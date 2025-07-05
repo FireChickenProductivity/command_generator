@@ -391,17 +391,19 @@ pub fn find_best(
     let (best_recommendations, score) =
         compute_greedy_best_in_parallel(&recommendations, max_number_of_recommendations, start);
     println!("Greedy score: {}", score);
-    let (tree_recommendations, tree_score) = perform_monte_carlo_tree_search(
-        recommendations.clone(),
-        start.clone(),
-        max_number_of_recommendations,
-    );
-    println!(
-        "Monte Carlo Tree Search score: {} vs greedy score {}",
-        tree_score, score
-    );
-    if tree_score > score {
-        return tree_recommendations;
+    if max_number_of_recommendations - start.len() > 1 {
+        let (tree_recommendations, tree_score) = perform_monte_carlo_tree_search(
+            recommendations.clone(),
+            start.clone(),
+            max_number_of_recommendations,
+        );
+        println!(
+            "Monte Carlo Tree Search score: {} vs greedy score {}",
+            tree_score, score
+        );
+        if tree_score > score {
+            return tree_recommendations;
+        }
     }
     best_recommendations
 }

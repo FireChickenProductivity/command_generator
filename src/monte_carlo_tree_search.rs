@@ -690,6 +690,7 @@ pub fn perform_monte_carlo_tree_search(
     mut start: Vec<usize>,
     recommendation_limit: usize,
 ) -> (Vec<CommandStatistics>, f64) {
+    let number_of_given_recommendations = start.len();
     let seed = 0;
     let mut best_score = 0.0;
     let mut best: Vec<CommandStatistics> = Vec::new();
@@ -700,7 +701,7 @@ pub fn perform_monte_carlo_tree_search(
     });
     let number_of_trials =
         (recommendations.len() as f64 / recommendation_limit as f64).round() as usize;
-    for i in 0..recommendation_limit - 1 {
+    for i in number_of_given_recommendations..recommendation_limit - 1 {
         if i > 0 {
             recommendations = filter_commands(&start, &recommendations);
             if recommendations.len() < recommendation_limit - i {
