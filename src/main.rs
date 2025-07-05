@@ -71,7 +71,7 @@ fn find_best_until_user_satisfied(
         for recommendation in best.iter() {
             if !to_keep.contains(&recommendation.actions) {
                 println!(
-                    "Type y to keep recommendation: \n{}",
+                    "\nType a command and press enter. y means keep the current command. ya means accept all commands. Anything else removes the current command.\n{}\n",
                     recommendation
                         .actions
                         .iter()
@@ -84,8 +84,11 @@ fn find_best_until_user_satisfied(
                 let actions = &recommendation.actions;
                 match _result {
                     Ok(_) => {
-                        if input.trim().to_lowercase() == "y" {
+                        let input_text = input.trim().to_lowercase();
+                        if input_text == "y" {
                             to_keep.insert(&actions);
+                        } else if input_text == "ya" {
+                            return best;
                         } else {
                             to_remove.insert(&actions);
                         }
