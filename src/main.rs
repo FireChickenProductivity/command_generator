@@ -14,8 +14,9 @@ use action_records::{Argument, BasicAction, Command, Entry, read_file_record};
 use current_time::compute_timestamp;
 use data_output::{create_data_directory, output_recommendations};
 use recommendation_generation::{
-    PotentialCommandInformation, compute_recommendations_from_record, create_sorted_info,
+    ActionSet, PotentialCommandInformation, compute_recommendations_from_record, create_sorted_info,
 };
+use std::io;
 use std::time::Instant;
 
 fn print_record(record: Result<Vec<Entry>, String>) {
@@ -56,6 +57,58 @@ fn find_best(
     recommendations
 }
 
+fn find_best_until_user_satisfied(
+    mut recommendations: Vec<recommendation_generation::CommandStatistics>,
+    number_of_recommendations: usize,
+) -> Vec<recommendation_generation::CommandStatistics> {
+    let mut start: Vec<usize> = Vec::new();
+    let mut best = Vec::new();
+    let mut to_keep = ActionSet::new();
+    loop {
+        best = find_best(recommendations.clone(), &start, number_of_recommendations);
+        let mut to_remove = ActionSet::new();
+        for recommendation in best.iter() {
+            if !to_keep.contains(&recommendation.actions) {
+                println!(
+                    "Type y to keep recommendation: \n{}",
+                    recommendation
+                        .actions
+                        .iter()
+                        .map(|action| action.compute_talon_script())
+                        .collect::<Vec<String>>()
+                        .join("\n")
+                );
+                let mut input = String::new();
+                let _result = io::stdin().read_line(&mut input);
+                let actions = &recommendation.actions;
+                match _result {
+                    Ok(_) => {
+                        if input.trim().to_lowercase() == "y" {
+                            to_keep.insert(&actions);
+                        } else {
+                            to_remove.insert(&actions);
+                        }
+                    }
+                    Err(_) => {
+                        println!("Error reading input!");
+                        to_remove.insert(&actions);
+                    }
+                }
+            }
+        }
+        if to_remove.get_size() == 0 {
+            return best;
+        }
+        start.clear();
+        recommendations.retain(|r| !to_remove.contains(&r.actions));
+        for (i, recommendation) in recommendations.iter().enumerate() {
+            if to_keep.contains(&recommendation.actions) {
+                start.push(i);
+            }
+        }
+    }
+}
+
 fn main() {
     match create_data_directory() {
         Ok(_) => {}
@@ -88,9 +141,8 @@ fn main() {
                     "Narrowed it down to {} recommendations",
                     recommendations.len()
                 );
-                recommendations = find_best(
+                recommendations = find_best_until_user_satisfied(
                     recommendations,
-                    &Vec::new(),
                     parameters.number_of_recommendations,
                 );
             }
