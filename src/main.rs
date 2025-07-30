@@ -49,6 +49,8 @@ fn find_best(
         recommendations,
         start,
         number_of_recommendations as usize,
+        false,
+        false,
     );
     println!(
         "Time taken to find best recommendations: {:.3?}",

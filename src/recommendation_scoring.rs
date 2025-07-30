@@ -384,23 +384,31 @@ pub fn find_best(
     recommendations: Vec<CommandStatistics>,
     start: &Vec<usize>,
     max_number_of_recommendations: usize,
+    use_tree_search: bool,
+    is_verbose: bool,
 ) -> Vec<CommandStatistics> {
     if max_number_of_recommendations >= recommendations.len() {
         return recommendations.clone();
     }
     let (best_recommendations, score) =
         compute_greedy_best_in_parallel(&recommendations, max_number_of_recommendations, start);
-    println!("Greedy score: {}", score);
-    if max_number_of_recommendations - start.len() > 1 {
+    if is_verbose {
+        println!("Greedy score: {}", score);
+    }
+    if use_tree_search && max_number_of_recommendations - start.len() > 1 {
         let (tree_recommendations, tree_score) = perform_monte_carlo_tree_search(
             recommendations.clone(),
             start,
             max_number_of_recommendations,
+            is_verbose,
         );
-        println!(
-            "Monte Carlo Tree Search score: {} vs greedy score {}",
-            tree_score, score
-        );
+        if is_verbose {
+            println!(
+                "Monte Carlo Tree Search score: {} vs greedy score {}",
+                tree_score, score
+            );
+        }
+
         if tree_score > score {
             return tree_recommendations;
         }

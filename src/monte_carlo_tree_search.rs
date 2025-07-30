@@ -541,7 +541,6 @@ fn perform_double_greedy(
         best_indexes.pop();
     }
 
-    println!("best score from double greedy: {}", best_score);
     best_indexes.push(best_index);
     (best_score, best_indexes)
 }
@@ -692,6 +691,7 @@ pub fn perform_monte_carlo_tree_search(
     mut recommendations: Vec<CommandStatistics>,
     given_start: &Vec<usize>,
     recommendation_limit: usize,
+    is_verbose: bool,
 ) -> (Vec<CommandStatistics>, f64) {
     let mut start = Vec::new();
     for i in given_start {
@@ -715,15 +715,21 @@ pub fn perform_monte_carlo_tree_search(
         if i > 0 {
             recommendations = filter_commands(&start, &recommendations);
             if recommendations.len() < recommendation_limit - i {
-                println!("Ending tree search early");
+                if is_verbose {
+                    println!("Ending tree search early");
+                }
+
                 break;
             }
         }
-        println!(
-            "Running round {} of tree search on {} recommendations",
-            i + 1,
-            recommendations.len()
-        );
+        if is_verbose {
+            println!(
+                "Running round {} of tree search on {} recommendations",
+                i + 1,
+                recommendations.len()
+            );
+        }
+
         let (score, indexes, best_index) = if i == recommendation_limit - 2 {
             let (score, best_indexes) = perform_double_greedy(
                 start.clone(),
@@ -731,6 +737,9 @@ pub fn perform_monte_carlo_tree_search(
                 &recommendations,
                 recommendation_limit,
             );
+            if is_verbose {
+                println!("best score from double greedy: {}", score);
+            }
             let best_index = best_indexes[i];
             (score, best_indexes, best_index)
         } else {
@@ -742,11 +751,15 @@ pub fn perform_monte_carlo_tree_search(
                 seed as u64,
             )
         };
-        println!("Round {} score: {}", i + 1, score);
+        if is_verbose {
+            println!("Round {} score: {}", i + 1, score);
+        }
         if score > best_score {
             best_score = score;
             best = compute_recommendations_for_indexes(&recommendations, &indexes);
-            println!("New best result {}", best_score);
+            if is_verbose {
+                println!("New best result {}", best_score);
+            }
         }
         start.push(i);
         if best_index != i {
@@ -757,7 +770,9 @@ pub fn perform_monte_carlo_tree_search(
         if greedy_score > best_score {
             best_score = greedy_score;
             best = greedy_result;
-            println!("Got better result with greedy {}", best_score);
+            if is_verbose {
+                println!("Got better result with greedy {}", best_score);
+            }
         }
     }
     (best, best_score)
