@@ -48,7 +48,7 @@ fn prompt_user_about_recommendation(
     recommendation: &recommendation_generation::CommandStatistics,
 ) -> String {
     println!(
-        "\nType a command and press enter. y means keep the current command. ya means accept all commands. Anything else removes the current command.\n{}\n",
+        "\nType a command and press enter. y means keep the current command. ya means accept all commands.\nr(action number here) removes all commands containing that action from future batches of recommendations.\nAnything else removes the current command.\n{}\n",
         recommendation
             .actions
             .iter()
