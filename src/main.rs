@@ -6,34 +6,19 @@ mod input_parsing;
 mod monte_carlo_tree_search;
 mod pool;
 mod random;
+mod recommendation_filtering;
 mod recommendation_generation;
 mod recommendation_scoring;
 mod text_separation;
 
-use action_records::{Argument, BasicAction, Command, Entry, read_file_record};
+use action_records::read_file_record;
 use current_time::compute_timestamp;
 use data_output::{create_data_directory, output_recommendations};
 use recommendation_generation::{
-    ActionSet, PotentialCommandInformation, compute_recommendations_from_record, create_sorted_info,
+    ActionSet, compute_recommendations_from_record, create_sorted_info,
 };
 use std::io;
 use std::time::Instant;
-
-fn print_record(record: Result<Vec<Entry>, String>) {
-    match record {
-        Ok(record) => {
-            for entry in record {
-                match entry {
-                    Entry::RecordingStart => println!("Recording started."),
-                    Entry::Command(command) => {
-                        println!("Command: {}", command.to_string());
-                    }
-                }
-            }
-        }
-        Err(e) => println!("Error reading record file:\n	{}", e),
-    }
-}
 
 fn find_best(
     recommendations: Vec<recommendation_generation::CommandStatistics>,
@@ -59,6 +44,18 @@ fn find_best(
     recommendations
 }
 
+fn prompt_user_about_recommendation(recommendation: &recommendation_generation::CommandStatistics) {
+    println!(
+        "\nType a command and press enter. y means keep the current command. ya means accept all commands. Anything else removes the current command.\n{}\n",
+        recommendation
+            .actions
+            .iter()
+            .map(|action| action.compute_talon_script())
+            .collect::<Vec<String>>()
+            .join("\n")
+    );
+}
+
 fn find_best_until_user_satisfied(
     mut recommendations: Vec<recommendation_generation::CommandStatistics>,
     number_of_recommendations: usize,
@@ -72,15 +69,7 @@ fn find_best_until_user_satisfied(
         let mut to_remove = ActionSet::new();
         for recommendation in best.iter() {
             if !to_keep.contains(&recommendation.actions) {
-                println!(
-                    "\nType a command and press enter. y means keep the current command. ya means accept all commands. Anything else removes the current command.\n{}\n",
-                    recommendation
-                        .actions
-                        .iter()
-                        .map(|action| action.compute_talon_script())
-                        .collect::<Vec<String>>()
-                        .join("\n")
-                );
+                prompt_user_about_recommendation(recommendation);
                 let mut input = String::new();
                 let _result = io::stdin().read_line(&mut input);
                 let actions = &recommendation.actions;
