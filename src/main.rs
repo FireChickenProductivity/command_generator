@@ -52,7 +52,8 @@ fn prompt_user_about_recommendation(
         recommendation
             .actions
             .iter()
-            .map(|action| action.compute_talon_script())
+            .enumerate()
+            .map(|(index, action)| format!("{}. {}", index + 1, action.compute_talon_script()))
             .collect::<Vec<String>>()
             .join("\n")
     );
@@ -75,13 +76,46 @@ fn perform_removals(
     recommendations: &mut Vec<recommendation_generation::CommandStatistics>,
     to_keep: &ActionSet,
     to_remove: &ActionSet,
+    to_remove_containing: ActionSet,
 ) {
     start.clear();
-    recommendations.retain(|r| !to_remove.contains(&r.actions));
+    recommendations.retain(|r| {
+        to_keep.contains(&r.actions)
+            || (!to_remove.contains(&r.actions)
+                && !r
+                    .actions
+                    .iter()
+                    .any(|action| to_remove_containing.contains_action(action)))
+    });
+    println!(
+        "Narrowed it down to {} recommendations",
+        recommendations.len()
+    );
     for (i, recommendation) in recommendations.iter().enumerate() {
         if to_keep.contains(&recommendation.actions) {
             start.push(i);
         }
+    }
+}
+
+fn update_to_remove_containing(
+    input_text: &str,
+    recommendation: &recommendation_generation::CommandStatistics,
+    to_remove_containing: &mut ActionSet,
+) {
+    if input_text.len() < 2 {
+        println!("Invalid input. Please enter a valid number.");
+    }
+
+    if let Ok(number) = input_text[1..].parse::<usize>() {
+        if number <= recommendation.actions.len() {
+            let action_to_remove = &recommendation.actions[number - 1];
+            to_remove_containing.insert_action(action_to_remove);
+        } else {
+            println!("Invalid action number. Please input one of the provided options.");
+        }
+    } else {
+        println!("Invalid action number. Please enter a valid number.");
     }
 }
 
@@ -93,24 +127,41 @@ fn find_best_until_user_satisfied(
     let mut to_keep = ActionSet::new();
     loop {
         let best = find_best(recommendations.clone(), &start, number_of_recommendations);
-        assert!(best.len() == number_of_recommendations);
         let mut to_remove = ActionSet::new();
+        let mut to_remove_containing = ActionSet::new();
         for recommendation in best.iter() {
             if !to_keep.contains(&recommendation.actions) {
-                let input_text = prompt_user_about_recommendation(recommendation);
-                if input_text == "y" {
-                    to_keep.insert(&recommendation.actions);
-                } else if input_text == "ya" {
-                    return best;
-                } else {
-                    to_remove.insert(&recommendation.actions);
+                let mut done = false;
+                while !done {
+                    let input_text = prompt_user_about_recommendation(recommendation);
+                    if input_text == "y" {
+                        to_keep.insert(&recommendation.actions);
+                        done = true;
+                    } else if input_text == "ya" {
+                        return best;
+                    } else if input_text.starts_with("r") {
+                        update_to_remove_containing(
+                            &input_text,
+                            recommendation,
+                            &mut to_remove_containing,
+                        );
+                    } else {
+                        to_remove.insert(&recommendation.actions);
+                        done = true;
+                    }
                 }
             }
         }
         if to_remove.get_size() == 0 {
             return best;
         }
-        perform_removals(&mut start, &mut recommendations, &to_keep, &to_remove);
+        perform_removals(
+            &mut start,
+            &mut recommendations,
+            &to_keep,
+            &to_remove,
+            to_remove_containing,
+        );
     }
 }
 
