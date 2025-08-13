@@ -44,7 +44,9 @@ fn find_best(
     recommendations
 }
 
-fn prompt_user_about_recommendation(recommendation: &recommendation_generation::CommandStatistics) {
+fn prompt_user_about_recommendation(
+    recommendation: &recommendation_generation::CommandStatistics,
+) -> String {
     println!(
         "\nType a command and press enter. y means keep the current command. ya means accept all commands. Anything else removes the current command.\n{}\n",
         recommendation
@@ -54,6 +56,33 @@ fn prompt_user_about_recommendation(recommendation: &recommendation_generation::
             .collect::<Vec<String>>()
             .join("\n")
     );
+    loop {
+        let mut input = String::new();
+        let _result = io::stdin().read_line(&mut input);
+        match _result {
+            Ok(_) => {
+                return input.trim().to_lowercase();
+            }
+            Err(_) => {
+                println!("Error reading input! Please try again.");
+            }
+        }
+    }
+}
+
+fn perform_removals(
+    start: &mut Vec<usize>,
+    recommendations: &mut Vec<recommendation_generation::CommandStatistics>,
+    to_keep: &ActionSet,
+    to_remove: &ActionSet,
+) {
+    start.clear();
+    recommendations.retain(|r| !to_remove.contains(&r.actions));
+    for (i, recommendation) in recommendations.iter().enumerate() {
+        if to_keep.contains(&recommendation.actions) {
+            start.push(i);
+        }
+    }
 }
 
 fn find_best_until_user_satisfied(
@@ -61,46 +90,27 @@ fn find_best_until_user_satisfied(
     number_of_recommendations: usize,
 ) -> Vec<recommendation_generation::CommandStatistics> {
     let mut start: Vec<usize> = Vec::new();
-    let mut best = Vec::new();
     let mut to_keep = ActionSet::new();
     loop {
-        best = find_best(recommendations.clone(), &start, number_of_recommendations);
+        let best = find_best(recommendations.clone(), &start, number_of_recommendations);
         assert!(best.len() == number_of_recommendations);
         let mut to_remove = ActionSet::new();
         for recommendation in best.iter() {
             if !to_keep.contains(&recommendation.actions) {
-                prompt_user_about_recommendation(recommendation);
-                let mut input = String::new();
-                let _result = io::stdin().read_line(&mut input);
-                let actions = &recommendation.actions;
-                match _result {
-                    Ok(_) => {
-                        let input_text = input.trim().to_lowercase();
-                        if input_text == "y" {
-                            to_keep.insert(&actions);
-                        } else if input_text == "ya" {
-                            return best;
-                        } else {
-                            to_remove.insert(&actions);
-                        }
-                    }
-                    Err(_) => {
-                        println!("Error reading input!");
-                        to_remove.insert(&actions);
-                    }
+                let input_text = prompt_user_about_recommendation(recommendation);
+                if input_text == "y" {
+                    to_keep.insert(&recommendation.actions);
+                } else if input_text == "ya" {
+                    return best;
+                } else {
+                    to_remove.insert(&recommendation.actions);
                 }
             }
         }
         if to_remove.get_size() == 0 {
             return best;
         }
-        start.clear();
-        recommendations.retain(|r| !to_remove.contains(&r.actions));
-        for (i, recommendation) in recommendations.iter().enumerate() {
-            if to_keep.contains(&recommendation.actions) {
-                start.push(i);
-            }
-        }
+        perform_removals(&mut start, &mut recommendations, &to_keep, &to_remove);
     }
 }
 
