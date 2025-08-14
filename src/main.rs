@@ -1,9 +1,11 @@
 mod action_records;
 mod action_utilities;
+mod configuration;
 mod current_time;
 mod data_output;
 mod input_parsing;
 mod monte_carlo_tree_search;
+mod paths;
 mod pool;
 mod random;
 mod recommendation_filtering;
@@ -173,6 +175,13 @@ fn main() {
             return;
         }
     }
+    match configuration::create_configuration_directory() {
+        Ok(_) => {}
+        Err(e) => {
+            println!("Error creating configuration directory: {}", e);
+        }
+    }
+
     let parameters = input_parsing::get_input_parameters_from_user();
     let start_time = Instant::now();
     println!("Reading file");

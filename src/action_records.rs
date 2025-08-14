@@ -374,7 +374,7 @@ fn add_current_item(
     Ok(())
 }
 
-fn load_basic_action_from_json(json: &str) -> Result<BasicAction, String> {
+pub fn load_basic_action_from_json(json: &str) -> Result<BasicAction, String> {
     let text = json.trim();
     let mut name = String::new();
     let mut arguments: Vec<Argument> = Vec::new();
