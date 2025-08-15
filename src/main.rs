@@ -22,6 +22,9 @@ use recommendation_generation::{
 use std::io;
 use std::time::Instant;
 
+const REJECT_ACTION_PREFIX: &str = "r";
+const PERSISTENTLY_REJECT_ACTION_PREFIX: &str = "ar";
+
 fn find_best(
     recommendations: Vec<recommendation_generation::CommandStatistics>,
     start: &Vec<usize>,
@@ -100,33 +103,61 @@ fn perform_removals(
     }
 }
 
+fn find_action_to_remove<'a>(
+    input_text: &str,
+    recommendation: &'a recommendation_generation::CommandStatistics,
+) -> Option<&'a action_records::BasicAction> {
+    if input_text.len() < 1 {
+        println!("Invalid input. Please enter a valid number.");
+    }
+
+    if let Ok(number) = input_text.parse::<usize>() {
+        match recommendation.actions.get(number - 1) {
+            Some(action) => {
+                return Some(action);
+            }
+            None => {
+                println!("Invalid action number. Please input one of the provided options.");
+            }
+        }
+    } else {
+        println!("Invalid action number. Please enter a valid number.");
+    }
+    None
+}
+
 fn update_to_remove_containing(
     input_text: &str,
     recommendation: &recommendation_generation::CommandStatistics,
     to_remove_containing: &mut ActionSet,
 ) {
-    if input_text.len() < 2 {
-        println!("Invalid input. Please enter a valid number.");
+    let possible_action = find_action_to_remove(input_text, recommendation);
+    if let Some(action) = possible_action {
+        to_remove_containing.insert_action(&action);
     }
+}
 
-    if let Ok(number) = input_text[1..].parse::<usize>() {
-        if number <= recommendation.actions.len() {
-            let action_to_remove = &recommendation.actions[number - 1];
-            to_remove_containing.insert_action(action_to_remove);
-        } else {
-            println!("Invalid action number. Please input one of the provided options.");
-        }
-    } else {
-        println!("Invalid action number. Please enter a valid number.");
+fn persistently_reject_action(
+    input_text: &str,
+    recommendation: &recommendation_generation::CommandStatistics,
+    to_remove_containing: &mut ActionSet,
+    to_persistently_reject_containing: &mut Vec<action_records::BasicAction>,
+) {
+    let possible_action = find_action_to_remove(input_text, recommendation);
+    if let Some(action) = possible_action {
+        to_persistently_reject_containing.push(action.clone());
+        to_remove_containing.insert_action(&action);
     }
 }
 
 fn find_best_until_user_satisfied(
     mut recommendations: Vec<recommendation_generation::CommandStatistics>,
     number_of_recommendations: usize,
+    to_persistently_reject_containing: &mut Vec<action_records::BasicAction>,
 ) -> Vec<recommendation_generation::CommandStatistics> {
     let mut start: Vec<usize> = Vec::new();
     let mut to_keep = ActionSet::new();
+
     loop {
         let best = find_best(recommendations.clone(), &start, number_of_recommendations);
         let mut to_remove = ActionSet::new();
@@ -143,9 +174,18 @@ fn find_best_until_user_satisfied(
                         return best;
                     } else if input_text.starts_with("r") {
                         update_to_remove_containing(
-                            &input_text,
+                            &input_text.strip_prefix("r").unwrap_or(""),
                             recommendation,
                             &mut to_remove_containing,
+                        );
+                    } else if input_text.starts_with(PERSISTENTLY_REJECT_ACTION_PREFIX) {
+                        persistently_reject_action(
+                            &input_text
+                                .strip_prefix(PERSISTENTLY_REJECT_ACTION_PREFIX)
+                                .unwrap_or(""),
+                            recommendation,
+                            &mut to_remove_containing,
+                            to_persistently_reject_containing,
                         );
                     } else {
                         to_remove.insert(&recommendation.actions);
@@ -217,10 +257,14 @@ fn main() {
                     "Narrowed it down to {} recommendations",
                     recommendations.len()
                 );
+                let mut to_persistently_reject_containing: Vec<action_records::BasicAction> =
+                    Vec::new();
                 recommendations = find_best_until_user_satisfied(
                     recommendations,
                     parameters.number_of_recommendations,
+                    &mut to_persistently_reject_containing,
                 );
+                configuration::append_actions_to_reject(&to_persistently_reject_containing);
             }
             create_sorted_info(&mut recommendations);
             let file_name = format!("recommendations {}.txt", compute_timestamp());

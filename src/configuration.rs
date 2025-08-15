@@ -61,6 +61,10 @@ pub fn get_actions_to_reject() -> ActionSet {
 }
 
 pub fn append_actions_to_reject(actions: &Vec<BasicAction>) {
+    if actions.is_empty() {
+        return;
+    }
+
     let file_path = match compute_configuration_filepath(ACTIONS_TO_REJECT_FILE_NAME) {
         Ok(path) => path,
         Err(e) => {
