@@ -220,7 +220,59 @@ fn initialize_directories() -> Result<(), std::io::Error> {
     Ok(())
 }
 
-fn create_recommendations_from_record(
+fn filter_recommendations(recommendations: &mut Vec<recommendation_generation::CommandStatistics>) {
+    let actions_to_reject = configuration::get_actions_to_reject();
+    if actions_to_reject.get_size() > 0 {
+        recommendation_filtering::filter_out_recommendations_containing_actions(
+            recommendations,
+            &actions_to_reject,
+        );
+        println!(
+            "{} recommendations after remaining filtering out rejected actions",
+            recommendations.len()
+        );
+    }
+}
+
+fn create_initial_recommendations(
+    record: Vec<action_records::Entry>,
+    parameters: &input_parsing::InputParameters,
+    start_time: Instant,
+) -> Vec<recommendation_generation::CommandStatistics> {
+    println!("Generating recommendations");
+    let recommendations = compute_recommendations_from_record(record, parameters.max_chain_size);
+    let elapsed_time = start_time.elapsed();
+    println!(
+        "Time taken to compute recommendations: {:.3?}",
+        elapsed_time
+    );
+    println!("Created {} recommendations.", recommendations.len());
+    recommendations
+}
+
+fn let_user_run_commands_on_recommendations(
+    recommendations: Vec<recommendation_generation::CommandStatistics>,
+    parameters: &input_parsing::InputParameters,
+) -> Vec<recommendation_generation::CommandStatistics> {
+    let mut recommendations =
+        recommendation_scoring::filter_out_recommendations_redundant_smaller_commands(
+            recommendations,
+        );
+    println!(
+        "Narrowed it down to {} recommendations",
+        recommendations.len()
+    );
+    let mut to_persistently_reject_containing: Vec<action_records::BasicAction> = Vec::new();
+    recommendations = find_best_until_user_satisfied(
+        recommendations,
+        parameters.number_of_recommendations,
+        &mut to_persistently_reject_containing,
+    );
+    configuration::append_actions_to_reject(&to_persistently_reject_containing);
+    recommendations
+}
+
+fn create_user_recommendations(
     record: Vec<action_records::Entry>,
     parameters: &input_parsing::InputParameters,
     start_time: Instant,
@@ -229,43 +281,13 @@ fn create_recommendations_from_record(
         println!("No actions in the record. Exiting.");
         return;
     }
-    println!("Generating recommendations");
-    let mut recommendations =
-        compute_recommendations_from_record(record, parameters.max_chain_size);
-    let elapsed_time = start_time.elapsed();
-    println!(
-        "Time taken to compute recommendations: {:.3?}",
-        elapsed_time
-    );
-    println!("Created {} recommendations.", recommendations.len());
-    let actions_to_reject = configuration::get_actions_to_reject();
-    if actions_to_reject.get_size() > 0 {
-        recommendation_filtering::filter_out_recommendations_containing_actions(
-            &mut recommendations,
-            &actions_to_reject,
-        );
-        println!(
-            "{} recommendations after remaining filtering out rejected actions",
-            recommendations.len()
-        );
-    }
+    let mut recommendations = create_initial_recommendations(record, parameters, start_time);
+    filter_recommendations(&mut recommendations);
+
     if parameters.number_of_recommendations > 0 {
-        recommendations =
-            recommendation_scoring::filter_out_recommendations_redundant_smaller_commands(
-                recommendations,
-            );
-        println!(
-            "Narrowed it down to {} recommendations",
-            recommendations.len()
-        );
-        let mut to_persistently_reject_containing: Vec<action_records::BasicAction> = Vec::new();
-        recommendations = find_best_until_user_satisfied(
-            recommendations,
-            parameters.number_of_recommendations,
-            &mut to_persistently_reject_containing,
-        );
-        configuration::append_actions_to_reject(&to_persistently_reject_containing);
+        recommendations = let_user_run_commands_on_recommendations(recommendations, parameters);
     }
+
     create_sorted_info(&mut recommendations);
     let file_name = format!("recommendations {}.txt", compute_timestamp());
     output_recommendations(&recommendations, &file_name)
@@ -288,7 +310,7 @@ fn main() {
     let record = read_file_record(record_file);
     match record {
         Ok(record) => {
-            create_recommendations_from_record(record, &parameters, start_time);
+            create_user_recommendations(record, &parameters, start_time);
         }
         Err(e) => println!("Error reading record file:\n	{}", e),
     }
