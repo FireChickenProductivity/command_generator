@@ -197,6 +197,17 @@ fn main() {
                 elapsed_time
             );
             println!("Created {} recommendations.", recommendations.len());
+            let actions_to_reject = configuration::get_actions_to_reject();
+            if actions_to_reject.get_size() > 0 {
+                recommendation_filtering::filter_out_recommendations_containing_actions(
+                    &mut recommendations,
+                    &actions_to_reject,
+                );
+                println!(
+                    "{} recommendations after remaining filtering out rejected actions",
+                    recommendations.len()
+                );
+            }
             if parameters.number_of_recommendations > 0 {
                 recommendations =
                     recommendation_scoring::filter_out_recommendations_redundant_smaller_commands(
