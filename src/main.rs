@@ -209,18 +209,23 @@ fn find_best_until_user_satisfied(
     }
 }
 
-fn main() {
-    match create_data_directory() {
-        Ok(_) => {}
-        Err(e) => {
-            println!("Error creating data directory: {}", e);
-            return;
-        }
-    }
+fn initialize_directories() -> Result<(), std::io::Error> {
+    create_data_directory()?;
     match configuration::create_configuration_directory() {
         Ok(_) => {}
         Err(e) => {
             println!("Error creating configuration directory: {}", e);
+        }
+    }
+    Ok(())
+}
+
+fn main() {
+    match initialize_directories() {
+        Ok(_) => {}
+        Err(e) => {
+            println!("Directory creation error: {}", e);
+            return;
         }
     }
 
