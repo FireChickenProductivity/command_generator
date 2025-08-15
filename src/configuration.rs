@@ -50,11 +50,7 @@ pub fn get_actions_to_reject() -> ActionSet {
 
     let file_content = fs::read_to_string(file_path).unwrap();
     for line in file_content.lines() {
-        if let Ok(action) = load_basic_action_from_json(line) {
-            actions_to_reject.insert_action(&action);
-        } else {
-            println!("Failed to parse action from line: {}", line);
-        }
+        actions_to_reject.insert_representation(line);
     }
 
     actions_to_reject

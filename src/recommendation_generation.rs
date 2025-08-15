@@ -184,6 +184,10 @@ impl ActionSet {
         self.set.insert(representation);
     }
 
+    pub fn insert_representation(&mut self, representation: &str) {
+        self.set.insert(representation.to_string());
+    }
+
     pub fn insert_action(&mut self, action: &BasicAction) {
         let representation = action.to_json();
         self.set.insert(representation);
