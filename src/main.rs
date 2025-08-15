@@ -24,6 +24,7 @@ use std::time::Instant;
 
 const REJECT_ACTION_PREFIX: &str = "r";
 const PERSISTENTLY_REJECT_ACTION_PREFIX: &str = "ar";
+const PERSISTENTLY_REJECT_COMMAND_PREFIX: &str = "arc";
 const ACCEPT_RECOMMENDATION_COMMAND: &str = "y";
 const ACCEPT_ALL_RECOMMENDATIONS_COMMAND: &str = "ya";
 
@@ -156,6 +157,7 @@ fn find_best_until_user_satisfied(
     mut recommendations: Vec<recommendation_generation::CommandStatistics>,
     number_of_recommendations: usize,
     to_persistently_reject_containing: &mut Vec<action_records::BasicAction>,
+    to_persistently_reject_commands: &mut Vec<Vec<action_records::BasicAction>>,
 ) -> Vec<recommendation_generation::CommandStatistics> {
     let mut start: Vec<usize> = Vec::new();
     let mut to_keep = ActionSet::new();
@@ -174,6 +176,8 @@ fn find_best_until_user_satisfied(
                         done = true;
                     } else if input_text == ACCEPT_ALL_RECOMMENDATIONS_COMMAND {
                         return best;
+                    } else if input_text == PERSISTENTLY_REJECT_COMMAND_PREFIX {
+                        to_persistently_reject_commands.push(recommendation.actions.clone());
                     } else if input_text.starts_with(REJECT_ACTION_PREFIX) {
                         update_to_remove_containing(
                             &input_text.strip_prefix(REJECT_ACTION_PREFIX).unwrap_or(""),
@@ -232,6 +236,16 @@ fn filter_recommendations(recommendations: &mut Vec<recommendation_generation::C
             recommendations.len()
         );
     }
+    let commands_to_reject = configuration::get_commands_to_reject();
+    if commands_to_reject.get_size() > 0 {
+        recommendation_filtering::filter_out_recommendations(recommendations, |recommendation| {
+            commands_to_reject.contains(&recommendation.actions)
+        });
+        println!(
+            "{} recommendations after remaining filtering out rejected commands",
+            recommendations.len()
+        );
+    }
 }
 
 fn create_initial_recommendations(
@@ -263,12 +277,15 @@ fn let_user_run_commands_on_recommendations(
         recommendations.len()
     );
     let mut to_persistently_reject_containing: Vec<action_records::BasicAction> = Vec::new();
+    let mut commands_to_persistently_reject = Vec::new();
     recommendations = find_best_until_user_satisfied(
         recommendations,
         parameters.number_of_recommendations,
         &mut to_persistently_reject_containing,
+        &mut commands_to_persistently_reject,
     );
     configuration::append_actions_to_reject(&to_persistently_reject_containing);
+    configuration::append_commands_to_reject(&commands_to_persistently_reject);
     recommendations
 }
 
