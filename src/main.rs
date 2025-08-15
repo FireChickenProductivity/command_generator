@@ -220,6 +220,59 @@ fn initialize_directories() -> Result<(), std::io::Error> {
     Ok(())
 }
 
+fn create_recommendations_from_record(
+    record: Vec<action_records::Entry>,
+    parameters: &input_parsing::InputParameters,
+    start_time: Instant,
+) {
+    if record.is_empty() {
+        println!("No actions in the record. Exiting.");
+        return;
+    }
+    println!("Generating recommendations");
+    let mut recommendations =
+        compute_recommendations_from_record(record, parameters.max_chain_size);
+    let elapsed_time = start_time.elapsed();
+    println!(
+        "Time taken to compute recommendations: {:.3?}",
+        elapsed_time
+    );
+    println!("Created {} recommendations.", recommendations.len());
+    let actions_to_reject = configuration::get_actions_to_reject();
+    if actions_to_reject.get_size() > 0 {
+        recommendation_filtering::filter_out_recommendations_containing_actions(
+            &mut recommendations,
+            &actions_to_reject,
+        );
+        println!(
+            "{} recommendations after remaining filtering out rejected actions",
+            recommendations.len()
+        );
+    }
+    if parameters.number_of_recommendations > 0 {
+        recommendations =
+            recommendation_scoring::filter_out_recommendations_redundant_smaller_commands(
+                recommendations,
+            );
+        println!(
+            "Narrowed it down to {} recommendations",
+            recommendations.len()
+        );
+        let mut to_persistently_reject_containing: Vec<action_records::BasicAction> = Vec::new();
+        recommendations = find_best_until_user_satisfied(
+            recommendations,
+            parameters.number_of_recommendations,
+            &mut to_persistently_reject_containing,
+        );
+        configuration::append_actions_to_reject(&to_persistently_reject_containing);
+    }
+    create_sorted_info(&mut recommendations);
+    let file_name = format!("recommendations {}.txt", compute_timestamp());
+    output_recommendations(&recommendations, &file_name)
+        .unwrap_or_else(|e| println!("Error writing recommendations to file: {}", e));
+    println!("Recommendations written to file.");
+}
+
 fn main() {
     match initialize_directories() {
         Ok(_) => {}
@@ -229,55 +282,13 @@ fn main() {
         }
     }
 
-    let parameters = input_parsing::get_input_parameters_from_user();
+    let (record_file, parameters) = input_parsing::get_input_parameters_from_user();
     let start_time = Instant::now();
     println!("Reading file");
-    let record = read_file_record(parameters.record_file);
+    let record = read_file_record(record_file);
     match record {
         Ok(record) => {
-            println!("Generating recommendations");
-            let mut recommendations =
-                compute_recommendations_from_record(record, parameters.max_chain_size);
-            let elapsed_time = start_time.elapsed();
-            println!(
-                "Time taken to compute recommendations: {:.3?}",
-                elapsed_time
-            );
-            println!("Created {} recommendations.", recommendations.len());
-            let actions_to_reject = configuration::get_actions_to_reject();
-            if actions_to_reject.get_size() > 0 {
-                recommendation_filtering::filter_out_recommendations_containing_actions(
-                    &mut recommendations,
-                    &actions_to_reject,
-                );
-                println!(
-                    "{} recommendations after remaining filtering out rejected actions",
-                    recommendations.len()
-                );
-            }
-            if parameters.number_of_recommendations > 0 {
-                recommendations =
-                    recommendation_scoring::filter_out_recommendations_redundant_smaller_commands(
-                        recommendations,
-                    );
-                println!(
-                    "Narrowed it down to {} recommendations",
-                    recommendations.len()
-                );
-                let mut to_persistently_reject_containing: Vec<action_records::BasicAction> =
-                    Vec::new();
-                recommendations = find_best_until_user_satisfied(
-                    recommendations,
-                    parameters.number_of_recommendations,
-                    &mut to_persistently_reject_containing,
-                );
-                configuration::append_actions_to_reject(&to_persistently_reject_containing);
-            }
-            create_sorted_info(&mut recommendations);
-            let file_name = format!("recommendations {}.txt", compute_timestamp());
-            output_recommendations(&recommendations, &file_name)
-                .unwrap_or_else(|e| println!("Error writing recommendations to file: {}", e));
-            println!("Recommendations written to file.");
+            create_recommendations_from_record(record, &parameters, start_time);
         }
         Err(e) => println!("Error reading record file:\n	{}", e),
     }
