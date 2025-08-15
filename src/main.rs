@@ -24,6 +24,8 @@ use std::time::Instant;
 
 const REJECT_ACTION_PREFIX: &str = "r";
 const PERSISTENTLY_REJECT_ACTION_PREFIX: &str = "ar";
+const ACCEPT_RECOMMENDATION_COMMAND: &str = "y";
+const ACCEPT_ALL_RECOMMENDATIONS_COMMAND: &str = "ya";
 
 fn find_best(
     recommendations: Vec<recommendation_generation::CommandStatistics>,
@@ -167,14 +169,14 @@ fn find_best_until_user_satisfied(
                 let mut done = false;
                 while !done {
                     let input_text = prompt_user_about_recommendation(recommendation);
-                    if input_text == "y" {
+                    if input_text == ACCEPT_RECOMMENDATION_COMMAND {
                         to_keep.insert(&recommendation.actions);
                         done = true;
-                    } else if input_text == "ya" {
+                    } else if input_text == ACCEPT_ALL_RECOMMENDATIONS_COMMAND {
                         return best;
-                    } else if input_text.starts_with("r") {
+                    } else if input_text.starts_with(REJECT_ACTION_PREFIX) {
                         update_to_remove_containing(
-                            &input_text.strip_prefix("r").unwrap_or(""),
+                            &input_text.strip_prefix(REJECT_ACTION_PREFIX).unwrap_or(""),
                             recommendation,
                             &mut to_remove_containing,
                         );
