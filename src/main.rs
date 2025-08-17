@@ -12,6 +12,7 @@ mod recommendation_filtering;
 mod recommendation_generation;
 mod recommendation_scoring;
 mod text_separation;
+mod user_command_parsing;
 
 use action_records::read_file_record;
 use current_time::compute_timestamp;
@@ -143,112 +144,6 @@ fn persistently_reject_action(
     }
 }
 
-struct UserCommand {
-    encountered_no: bool,
-    encountered_yes: bool,
-    encountered_reject_command_persistently: bool,
-    action_number_to_reject: Option<usize>,
-    action_number_reject_persistently: Option<usize>,
-    encountered_accept_the_rest_of_the_commands: bool,
-}
-
-impl UserCommand {
-    fn new(input_text: String) -> Result<UserCommand, String> {
-        if input_text.is_empty() {
-            return Ok(UserCommand {
-                encountered_no: true,
-                encountered_yes: false,
-                encountered_reject_command_persistently: false,
-                action_number_to_reject: None,
-                action_number_reject_persistently: None,
-                encountered_accept_the_rest_of_the_commands: false,
-            });
-        }
-        let white_space_separated_tokens: Vec<&str> = input_text.split_whitespace().collect();
-        if white_space_separated_tokens.len() > 2 {
-            return Err(format!(
-                "A valid command would only have one or fewer spaces. You entered: {}",
-                input_text
-            ));
-        }
-        let mut encountered_no = false;
-        let mut encountered_yes = false;
-        let mut encountered_reject_command_persistently = false;
-        let mut action_number_to_reject = None;
-        let mut action_number_reject_persistently = None;
-        let mut expecting_action_number_to_reject = false;
-        let mut expecting_action_number_reject_persistently = false;
-        let mut encountered_accept_the_rest_of_the_commands = false;
-        let mut invalid_character = None;
-        white_space_separated_tokens[0]
-            .chars()
-            .for_each(|c| match c {
-                'y' => {
-                    encountered_yes = true;
-                }
-                'n' => {
-                    encountered_no = true;
-                }
-                'r' => {
-                    expecting_action_number_reject_persistently = true;
-                }
-                'd' => {
-                    expecting_action_number_to_reject = true;
-                }
-                'c' => {
-                    encountered_reject_command_persistently = true;
-                }
-                'a' => {
-                    encountered_accept_the_rest_of_the_commands = true;
-                }
-                _ => {
-                    invalid_character = Some(c);
-                }
-            });
-        if invalid_character.is_some() {
-            return Err(format!(
-                "Received invalid command character: {}.",
-                invalid_character.unwrap()
-            ));
-        }
-        if encountered_no && encountered_yes {
-            return Err("You cannot accept and reject a command at the same time.".to_string());
-        }
-        if expecting_action_number_to_reject && white_space_separated_tokens.len() < 2 {
-            return Err("You need to provide an action number to reject.".to_string());
-        }
-        if expecting_action_number_reject_persistently && white_space_separated_tokens.len() < 2 {
-            return Err("You need to provide an action number to reject persistently.".to_string());
-        }
-        if expecting_action_number_reject_persistently && encountered_reject_command_persistently {
-            match white_space_separated_tokens[1].parse::<usize>() {
-                Ok(action_number) => {
-                    if expecting_action_number_reject_persistently {
-                        action_number_reject_persistently = Some(action_number);
-                    }
-                    if expecting_action_number_to_reject {
-                        action_number_to_reject = Some(action_number);
-                    }
-                }
-                Err(_) => {
-                    return Err(format!(
-                        "Invalid action number: {}",
-                        white_space_separated_tokens[1]
-                    ));
-                }
-            }
-        }
-        return Ok(Self {
-            encountered_no,
-            encountered_yes,
-            encountered_reject_command_persistently,
-            action_number_to_reject,
-            action_number_reject_persistently,
-            encountered_accept_the_rest_of_the_commands,
-        });
-    }
-}
-
 fn find_best_until_user_satisfied(
     mut recommendations: Vec<recommendation_generation::CommandStatistics>,
     number_of_recommendations: usize,
@@ -270,7 +165,7 @@ fn find_best_until_user_satisfied(
                 let mut done = false;
                 while !done {
                     let input_text = prompt_user_about_recommendation(recommendation);
-                    let user_command = match UserCommand::new(input_text) {
+                    let user_command = match user_command_parsing::UserCommand::new(input_text) {
                         Ok(command) => command,
                         Err(e) => {
                             println!("{}", e);
