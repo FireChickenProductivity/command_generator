@@ -224,4 +224,11 @@ mod tests {
         let input = UNUSED_CHARACTER;
         assert_error(input);
     }
+
+    #[test]
+    fn accepting_all() {
+        let input = "a";
+        let expected_flags = HashSet::from([ACCEPT_THE_REST_OF_THE_COMMANDS_FLAG.to_string()]);
+        assert_input_has_flags(&input, &expected_flags);
+    }
 }
