@@ -107,46 +107,36 @@ fn perform_removals(
 }
 
 fn find_action_to_remove<'a>(
-    input_text: &str,
+    input_number: usize,
     recommendation: &'a recommendation_generation::CommandStatistics,
 ) -> Option<&'a action_records::BasicAction> {
-    if input_text.len() < 1 {
-        println!("Invalid input. Please enter a valid number.");
-    }
-
-    if let Ok(number) = input_text.parse::<usize>() {
-        match recommendation.actions.get(number - 1) {
-            Some(action) => {
-                return Some(action);
-            }
-            None => {
-                println!("Invalid action number. Please input one of the provided options.");
-            }
+    match recommendation.actions.get(input_number - 1) {
+        Some(action) => Some(action),
+        None => {
+            println!("Invalid action number. Please input one of the provided options.");
+            None
         }
-    } else {
-        println!("Invalid action number. Please enter a valid number.");
     }
-    None
 }
 
 fn update_to_remove_containing(
-    input_text: &str,
+    input_number: usize,
     recommendation: &recommendation_generation::CommandStatistics,
     to_remove_containing: &mut ActionSet,
 ) {
-    let possible_action = find_action_to_remove(input_text, recommendation);
+    let possible_action = find_action_to_remove(input_number, recommendation);
     if let Some(action) = possible_action {
         to_remove_containing.insert_action(&action);
     }
 }
 
 fn persistently_reject_action(
-    input_text: &str,
+    input_number: usize,
     recommendation: &recommendation_generation::CommandStatistics,
     to_remove_containing: &mut ActionSet,
     to_persistently_reject_containing: &mut Vec<action_records::BasicAction>,
 ) {
-    let possible_action = find_action_to_remove(input_text, recommendation);
+    let possible_action = find_action_to_remove(input_number, recommendation);
     if let Some(action) = possible_action {
         to_persistently_reject_containing.push(action.clone());
         to_remove_containing.insert_action(&action);
@@ -267,48 +257,59 @@ fn find_best_until_user_satisfied(
 ) -> Vec<recommendation_generation::CommandStatistics> {
     let mut start: Vec<usize> = Vec::new();
     let mut to_keep = ActionSet::new();
+    let mut should_keep_everything_else = false;
 
     loop {
         let best = find_best(recommendations.clone(), &start, number_of_recommendations);
         let mut to_remove = ActionSet::new();
         let mut to_remove_containing = ActionSet::new();
         for recommendation in best.iter() {
-            if !to_keep.contains(&recommendation.actions) {
+            if should_keep_everything_else {
+                to_keep.insert(&recommendation.actions);
+            } else if !to_keep.contains(&recommendation.actions) {
                 let mut done = false;
                 while !done {
                     let input_text = prompt_user_about_recommendation(recommendation);
-                    // let user_command = match UserCommand::new(input_text) {
-                    //     Ok(command) => command,
-                    //     Err(e) => {
-                    //         println!("{}", e);
-                    //         continue;
-                    //     }
-                    // };
-
-                    if input_text == ACCEPT_RECOMMENDATION_COMMAND {
+                    let user_command = match UserCommand::new(input_text) {
+                        Ok(command) => command,
+                        Err(e) => {
+                            println!("{}", e);
+                            continue;
+                        }
+                    };
+                    if user_command.encountered_yes {
                         to_keep.insert(&recommendation.actions);
-                        done = true;
-                    } else if input_text == ACCEPT_ALL_RECOMMENDATIONS_COMMAND {
-                        return best;
-                    } else if input_text == PERSISTENTLY_REJECT_COMMAND_PREFIX {
+                    } else if user_command.encountered_no {
+                        to_remove.insert(&recommendation.actions);
+                    }
+                    if user_command.encountered_reject_command_persistently {
                         to_persistently_reject_commands.push(recommendation.actions.clone());
-                    } else if input_text.starts_with(REJECT_ACTION_PREFIX) {
+                    }
+                    if let Some(action_number) = user_command.action_number_to_reject {
                         update_to_remove_containing(
-                            &input_text.strip_prefix(REJECT_ACTION_PREFIX).unwrap_or(""),
+                            action_number,
                             recommendation,
                             &mut to_remove_containing,
                         );
-                    } else if input_text.starts_with(PERSISTENTLY_REJECT_ACTION_PREFIX) {
+                    }
+
+                    if let Some(action_number) = user_command.action_number_reject_persistently {
                         persistently_reject_action(
-                            &input_text
-                                .strip_prefix(PERSISTENTLY_REJECT_ACTION_PREFIX)
-                                .unwrap_or(""),
+                            action_number,
                             recommendation,
                             &mut to_remove_containing,
                             to_persistently_reject_containing,
                         );
-                    } else {
-                        to_remove.insert(&recommendation.actions);
+                    }
+                    if user_command.encountered_reject_command_persistently {
+                        to_persistently_reject_commands.push(recommendation.actions.clone());
+                    }
+                    if user_command.encountered_accept_the_rest_of_the_commands {
+                        should_keep_everything_else = true;
+                    }
+                    if !user_command.action_number_reject_persistently.is_some()
+                        && !user_command.action_number_to_reject.is_some()
+                    {
                         done = true;
                     }
                 }
