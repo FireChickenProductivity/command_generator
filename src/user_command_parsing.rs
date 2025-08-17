@@ -108,6 +108,12 @@ impl UserCommand {
 #[cfg(test)]
 mod tests {
     use super::*;
+    const REJECTION_FLAG: &str = "reject_command_persistently";
+    const YES_FLAG: &str = "yes";
+    const NO_FLAG: &str = "no";
+    const ACCEPT_THE_REST_OF_THE_COMMANDS_FLAG: &str = "accept_the_rest_of_the_commands";
+    const UNUSED_CHARACTER: &str = "U";
+
     fn compute_persistent_rejection_string(action_number: usize) -> String {
         format!("reject_action_persistently_{}", action_number)
     }
@@ -117,13 +123,13 @@ mod tests {
     fn compute_flags(command: &UserCommand) -> HashSet<String> {
         let mut flags = HashSet::new();
         if command.encountered_no {
-            flags.insert("no".to_string());
+            flags.insert(NO_FLAG.to_string());
         }
         if command.encountered_yes {
-            flags.insert("yes".to_string());
+            flags.insert(YES_FLAG.to_string());
         }
         if command.encountered_reject_command_persistently {
-            flags.insert("reject_command_persistently".to_string());
+            flags.insert(REJECTION_FLAG.to_string());
         }
         if let Some(action_number) = command.action_number_to_reject {
             flags.insert(compute_rejection_string(action_number));
@@ -132,7 +138,7 @@ mod tests {
             flags.insert(compute_persistent_rejection_string(action_number));
         }
         if command.encountered_accept_the_rest_of_the_commands {
-            flags.insert("accept_the_rest_of_the_commands".to_string());
+            flags.insert(ACCEPT_THE_REST_OF_THE_COMMANDS_FLAG.to_string());
         }
         flags
     }
@@ -151,7 +157,7 @@ mod tests {
     #[test]
     fn handles_empty() {
         let input = "";
-        let expected_flags = HashSet::from(["no".to_string()]);
+        let expected_flags = HashSet::from([NO_FLAG.to_string()]);
         assert_input_has_flags(&input, &expected_flags);
     }
 
@@ -162,9 +168,9 @@ mod tests {
     }
 
     #[test]
-    fn handles_yes() {
+    fn yes() {
         let input = "y";
-        let expected_flags = HashSet::from(["yes".to_string()]);
+        let expected_flags = HashSet::from([YES_FLAG.to_string()]);
         assert_input_has_flags(&input, &expected_flags);
     }
 
@@ -175,23 +181,47 @@ mod tests {
     }
 
     #[test]
-    fn handles_no() {
+    fn no() {
         let input = "n";
-        let expected_flags = HashSet::from(["no".to_string()]);
+        let expected_flags = HashSet::from([NO_FLAG.to_string()]);
         assert_input_has_flags(&input, &expected_flags);
     }
 
     #[test]
-    fn handles_persistently_reject_number_one() {
+    fn persistently_reject_number_one() {
         let input = "r 1";
         let expected_flags = HashSet::from([compute_persistent_rejection_string(1).to_string()]);
         assert_input_has_flags(&input, &expected_flags);
     }
 
     #[test]
-    fn handles_reject_number_two() {
+    fn reject_number_two() {
         let input = "d 2";
         let expected_flags = HashSet::from([compute_rejection_string(2).to_string()]);
         assert_input_has_flags(&input, &expected_flags);
+    }
+
+    #[test]
+    fn reject_command() {
+        let input = "c";
+        let expected_flags = HashSet::from([REJECTION_FLAG.to_string()]);
+        assert_input_has_flags(&input, &expected_flags);
+    }
+
+    #[test]
+    fn combination() {
+        let input = "ycr 2";
+        let expected_flags = HashSet::from([
+            YES_FLAG.to_string(),
+            REJECTION_FLAG.to_string(),
+            compute_persistent_rejection_string(2).to_string(),
+        ]);
+        assert_input_has_flags(&input, &expected_flags);
+    }
+
+    #[test]
+    fn unused_character() {
+        let input = UNUSED_CHARACTER;
+        assert_error(input);
     }
 }
