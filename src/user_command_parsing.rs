@@ -76,7 +76,7 @@ impl UserCommand {
         if expecting_action_number_reject_persistently && white_space_separated_tokens.len() < 2 {
             return Err("You need to provide an action number to reject persistently.".to_string());
         }
-        if expecting_action_number_reject_persistently || encountered_reject_command_persistently {
+        if expecting_action_number_reject_persistently || expecting_action_number_to_reject {
             match white_space_separated_tokens[1].parse::<usize>() {
                 Ok(action_number) => {
                     if expecting_action_number_reject_persistently {
@@ -185,6 +185,13 @@ mod tests {
     fn handles_persistently_reject_number_one() {
         let input = "r 1";
         let expected_flags = HashSet::from([compute_persistent_rejection_string(1).to_string()]);
+        assert_input_has_flags(&input, &expected_flags);
+    }
+
+    #[test]
+    fn handles_reject_number_two() {
+        let input = "d 2";
+        let expected_flags = HashSet::from([compute_rejection_string(2).to_string()]);
         assert_input_has_flags(&input, &expected_flags);
     }
 }
