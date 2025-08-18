@@ -4,8 +4,8 @@ pub struct UserCommand {
     pub encountered_no: bool,
     pub encountered_yes: bool,
     pub encountered_reject_command_persistently: bool,
-    pub action_number_to_reject: Option<usize>,
-    pub action_number_reject_persistently: Option<usize>,
+    pub action_numbers_to_reject: Vec<usize>,
+    pub action_numbers_to_reject_persistently: Vec<usize>,
     pub encountered_accept_the_rest_of_the_commands: bool,
 }
 impl UserCommand {
@@ -15,23 +15,17 @@ impl UserCommand {
                 encountered_no: true,
                 encountered_yes: false,
                 encountered_reject_command_persistently: false,
-                action_number_to_reject: None,
-                action_number_reject_persistently: None,
+                action_numbers_to_reject: Vec::new(),
+                action_numbers_to_reject_persistently: Vec::new(),
                 encountered_accept_the_rest_of_the_commands: false,
             });
         }
         let white_space_separated_tokens: Vec<&str> = input_text.split_whitespace().collect();
-        if white_space_separated_tokens.len() > 2 {
-            return Err(format!(
-                "A valid command would only have one or fewer spaces. You entered: {}",
-                input_text
-            ));
-        }
         let mut encountered_no = false;
         let mut encountered_yes = false;
         let mut encountered_reject_command_persistently = false;
-        let mut action_number_to_reject = None;
-        let mut action_number_reject_persistently = None;
+        let mut action_numbers_to_reject = Vec::new();
+        let mut action_numbers_to_reject_persistently = Vec::new();
         let mut expecting_action_number_to_reject = false;
         let mut expecting_action_number_reject_persistently = false;
         let mut encountered_accept_the_rest_of_the_commands = false;
@@ -76,30 +70,34 @@ impl UserCommand {
         if expecting_action_number_reject_persistently && white_space_separated_tokens.len() < 2 {
             return Err("You need to provide an action number to reject persistently.".to_string());
         }
+        let mut encountered_invalid_number = None;
         if expecting_action_number_reject_persistently || expecting_action_number_to_reject {
-            match white_space_separated_tokens[1].parse::<usize>() {
-                Ok(action_number) => {
-                    if expecting_action_number_reject_persistently {
-                        action_number_reject_persistently = Some(action_number);
+            white_space_separated_tokens[1..].iter().for_each(|&token| {
+                match token.parse::<usize>() {
+                    Ok(action_number) => {
+                        if expecting_action_number_reject_persistently {
+                            action_numbers_to_reject_persistently.push(action_number);
+                        }
+                        if expecting_action_number_to_reject {
+                            action_numbers_to_reject.push(action_number);
+                        }
                     }
-                    if expecting_action_number_to_reject {
-                        action_number_to_reject = Some(action_number);
+                    Err(_) => {
+                        encountered_invalid_number = Some(token);
                     }
                 }
-                Err(_) => {
-                    return Err(format!(
-                        "Invalid action number: {}",
-                        white_space_separated_tokens[1]
-                    ));
-                }
-            }
+            });
+        }
+
+        if let Some(invalid_number) = encountered_invalid_number {
+            return Err(format!("Invalid action number: {}", invalid_number));
         }
         return Ok(Self {
             encountered_no,
             encountered_yes,
             encountered_reject_command_persistently,
-            action_number_to_reject,
-            action_number_reject_persistently,
+            action_numbers_to_reject,
+            action_numbers_to_reject_persistently,
             encountered_accept_the_rest_of_the_commands,
         });
     }
@@ -131,11 +129,11 @@ mod tests {
         if command.encountered_reject_command_persistently {
             flags.insert(REJECTION_FLAG.to_string());
         }
-        if let Some(action_number) = command.action_number_to_reject {
-            flags.insert(compute_rejection_string(action_number));
+        for action_number in &command.action_numbers_to_reject {
+            flags.insert(compute_rejection_string(*action_number));
         }
-        if let Some(action_number) = command.action_number_reject_persistently {
-            flags.insert(compute_persistent_rejection_string(action_number));
+        for action_number in &command.action_numbers_to_reject_persistently {
+            flags.insert(compute_persistent_rejection_string(*action_number));
         }
         if command.encountered_accept_the_rest_of_the_commands {
             flags.insert(ACCEPT_THE_REST_OF_THE_COMMANDS_FLAG.to_string());
@@ -162,9 +160,24 @@ mod tests {
     }
 
     #[test]
-    fn rejects_two_spaces() {
+    fn handles_multiple_spaces_for_persistent_rejection() {
         let input = "yr 3 9";
-        assert_error(input);
+        let expected_flags = HashSet::from([
+            YES_FLAG.to_string(),
+            compute_persistent_rejection_string(3).to_string(),
+            compute_persistent_rejection_string(9).to_string(),
+        ]);
+        assert_input_has_flags(&input, &expected_flags);
+    }
+
+    #[test]
+    fn handles_multiple_spaces_for_rejection() {
+        let input = "d 4 5";
+        let expected_flags = HashSet::from([
+            compute_rejection_string(4).to_string(),
+            compute_rejection_string(5).to_string(),
+        ]);
+        assert_input_has_flags(&input, &expected_flags);
     }
 
     #[test]

@@ -101,40 +101,47 @@ fn perform_removals(
     }
 }
 
-fn find_action_to_remove<'a>(
-    input_number: usize,
+fn find_actions_to_remove<'a>(
+    input_numbers: &Vec<usize>,
     recommendation: &'a recommendation_generation::CommandStatistics,
-) -> Option<&'a action_records::BasicAction> {
-    match recommendation.actions.get(input_number - 1) {
-        Some(action) => Some(action),
-        None => {
-            println!("Invalid action number. Please input one of the provided options.");
-            None
+) -> Vec<&'a action_records::BasicAction> {
+    let mut actions_to_remove = Vec::new();
+    for number in input_numbers {
+        if let Some(action) = recommendation.actions.get(*number - 1) {
+            actions_to_remove.push(action);
+        } else {
+            println!("Invalid action number. Please input one of the provided options.",);
+            return Vec::new();
+        }
+    }
+    actions_to_remove
+}
+
+fn update_to_remove_containing(
+    input_numbers: &Vec<usize>,
+    recommendation: &recommendation_generation::CommandStatistics,
+    to_remove_containing: &mut ActionSet,
+) {
+    let possible_actions = find_actions_to_remove(input_numbers, recommendation);
+    if !possible_actions.is_empty() {
+        for action in possible_actions {
+            to_remove_containing.insert_action(action);
         }
     }
 }
 
-fn update_to_remove_containing(
-    input_number: usize,
-    recommendation: &recommendation_generation::CommandStatistics,
-    to_remove_containing: &mut ActionSet,
-) {
-    let possible_action = find_action_to_remove(input_number, recommendation);
-    if let Some(action) = possible_action {
-        to_remove_containing.insert_action(&action);
-    }
-}
-
-fn persistently_reject_action(
-    input_number: usize,
+fn persistently_reject_actions(
+    input_numbers: &Vec<usize>,
     recommendation: &recommendation_generation::CommandStatistics,
     to_remove_containing: &mut ActionSet,
     to_persistently_reject_containing: &mut Vec<action_records::BasicAction>,
 ) {
-    let possible_action = find_action_to_remove(input_number, recommendation);
-    if let Some(action) = possible_action {
-        to_persistently_reject_containing.push(action.clone());
-        to_remove_containing.insert_action(&action);
+    let possible_actions = find_actions_to_remove(input_numbers, recommendation);
+    if !possible_actions.is_empty() {
+        for action in possible_actions {
+            to_persistently_reject_containing.push(action.clone());
+            to_remove_containing.insert_action(action);
+        }
     }
 }
 
@@ -174,16 +181,19 @@ fn find_best_until_user_satisfied(
                     if user_command.encountered_reject_command_persistently {
                         to_persistently_reject_commands.push(recommendation.actions.clone());
                     }
-                    if let Some(action_number) = user_command.action_number_to_reject {
+                    if !user_command.action_numbers_to_reject.is_empty() {
                         update_to_remove_containing(
-                            action_number,
+                            &user_command.action_numbers_to_reject,
                             recommendation,
                             &mut to_remove_containing,
                         );
                     }
-                    if let Some(action_number) = user_command.action_number_reject_persistently {
-                        persistently_reject_action(
-                            action_number,
+                    if !user_command
+                        .action_numbers_to_reject_persistently
+                        .is_empty()
+                    {
+                        persistently_reject_actions(
+                            &user_command.action_numbers_to_reject_persistently,
                             recommendation,
                             &mut to_remove_containing,
                             to_persistently_reject_containing,
@@ -192,8 +202,10 @@ fn find_best_until_user_satisfied(
                     if user_command.encountered_accept_the_rest_of_the_commands {
                         should_keep_everything_else = true;
                     }
-                    if !user_command.action_number_reject_persistently.is_some()
-                        && !user_command.action_number_to_reject.is_some()
+                    if user_command.action_numbers_to_reject.is_empty()
+                        && user_command
+                            .action_numbers_to_reject_persistently
+                            .is_empty()
                     {
                         done = true;
                     }
