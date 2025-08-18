@@ -187,7 +187,6 @@ fn find_best_until_user_satisfied(
                             &mut to_remove_containing,
                         );
                     }
-
                     if let Some(action_number) = user_command.action_number_reject_persistently {
                         persistently_reject_action(
                             action_number,
@@ -195,9 +194,6 @@ fn find_best_until_user_satisfied(
                             &mut to_remove_containing,
                             to_persistently_reject_containing,
                         );
-                    }
-                    if user_command.encountered_reject_command_persistently {
-                        to_persistently_reject_commands.push(recommendation.actions.clone());
                     }
                     if user_command.encountered_accept_the_rest_of_the_commands {
                         should_keep_everything_else = true;
