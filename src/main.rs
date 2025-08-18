@@ -51,7 +51,7 @@ fn prompt_user_about_recommendation(
     recommendation: &recommendation_generation::CommandStatistics,
 ) -> String {
     println!(
-        "\nType a command and press enter. y means keep the current command.\nn or pressing enter without typing anything means reject the current command.\nc means do not provide this recommendation again.\nd followed by a space and space separated numbers means do not recommend the actions with those numbers again during this session.\nr followed by a space and space separated numbers means do not recommend the actions with those numbers again.\na means accept all commands\nmultiple commands can be provided at the same time by combining letters.\n{}\n",
+        "\nType a command and press enter. y means keep the current command.\nn or pressing enter without typing anything means reject the current command.\nc means do not provide this recommendation again.\nd followed by a space and space separated numbers means do not recommend the actions with those numbers again during this session.\nr followed by a space and space separated numbers means do not recommend the actions with those numbers again.\na means accept all commands\nmultiple commands can be provided at the same time by combining letters.\nThe program moves on to the next recommendation after you issue a command with no number arguments\n{}\n",
         recommendation
             .actions
             .iter()
