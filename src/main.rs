@@ -23,12 +23,6 @@ use recommendation_generation::{
 use std::io;
 use std::time::Instant;
 
-const REJECT_ACTION_PREFIX: &str = "r";
-const PERSISTENTLY_REJECT_ACTION_PREFIX: &str = "ar";
-const PERSISTENTLY_REJECT_COMMAND_PREFIX: &str = "arc";
-const ACCEPT_RECOMMENDATION_COMMAND: &str = "y";
-const ACCEPT_ALL_RECOMMENDATIONS_COMMAND: &str = "ya";
-
 fn find_best(
     recommendations: Vec<recommendation_generation::CommandStatistics>,
     start: &Vec<usize>,
@@ -57,7 +51,7 @@ fn prompt_user_about_recommendation(
     recommendation: &recommendation_generation::CommandStatistics,
 ) -> String {
     println!(
-        "\nType a command and press enter. y means keep the current command. ya means accept all commands.\nr(action number here) removes all commands containing that action from future batches of recommendations.\nar(action number here) will reject any command containing that action in future uses of the program.\narc will reject the command during future uses of the program.\nAnything else removes the current command.\n{}\n",
+        "\nType a command and press enter. y means keep the current command.\nn or pressing enter without typing anything means reject the current command.\nc means do not provide this recommendation again.\nd followed by a space and a number means do not recommend the action with that number again during this session.\nr followed by a space and a number means do not recommend the action of that number again.\na means accept all commands\nmultiple commands can be provided at the same time by combining letters.\n{}\n",
         recommendation
             .actions
             .iter()
