@@ -1,0 +1,247 @@
+use std::collections::HashSet;
+
+pub struct UserCommand {
+    pub encountered_no: bool,
+    pub encountered_yes: bool,
+    pub encountered_reject_command_persistently: bool,
+    pub action_numbers_to_reject: Vec<usize>,
+    pub action_numbers_to_reject_persistently: Vec<usize>,
+    pub encountered_accept_the_rest_of_the_commands: bool,
+}
+impl UserCommand {
+    pub fn new(input_text: String) -> Result<UserCommand, String> {
+        if input_text.is_empty() {
+            return Ok(UserCommand {
+                encountered_no: true,
+                encountered_yes: false,
+                encountered_reject_command_persistently: false,
+                action_numbers_to_reject: Vec::new(),
+                action_numbers_to_reject_persistently: Vec::new(),
+                encountered_accept_the_rest_of_the_commands: false,
+            });
+        }
+        let white_space_separated_tokens: Vec<&str> = input_text.split_whitespace().collect();
+        let mut encountered_no = false;
+        let mut encountered_yes = false;
+        let mut encountered_reject_command_persistently = false;
+        let mut action_numbers_to_reject = Vec::new();
+        let mut action_numbers_to_reject_persistently = Vec::new();
+        let mut expecting_action_number_to_reject = false;
+        let mut expecting_action_number_reject_persistently = false;
+        let mut encountered_accept_the_rest_of_the_commands = false;
+        let mut invalid_character = None;
+        white_space_separated_tokens[0]
+            .chars()
+            .for_each(|c| match c {
+                'y' => {
+                    encountered_yes = true;
+                }
+                'n' => {
+                    encountered_no = true;
+                }
+                'r' => {
+                    expecting_action_number_reject_persistently = true;
+                }
+                'd' => {
+                    expecting_action_number_to_reject = true;
+                }
+                'c' => {
+                    encountered_reject_command_persistently = true;
+                }
+                'a' => {
+                    encountered_accept_the_rest_of_the_commands = true;
+                }
+                _ => {
+                    invalid_character = Some(c);
+                }
+            });
+        if invalid_character.is_some() {
+            return Err(format!(
+                "Received invalid command character: {}.",
+                invalid_character.unwrap()
+            ));
+        }
+        if encountered_no && encountered_yes {
+            return Err("You cannot accept and reject a command at the same time.".to_string());
+        }
+        if expecting_action_number_to_reject && white_space_separated_tokens.len() < 2 {
+            return Err("You need to provide an action number to reject.".to_string());
+        }
+        if expecting_action_number_reject_persistently && white_space_separated_tokens.len() < 2 {
+            return Err("You need to provide an action number to reject persistently.".to_string());
+        }
+        let mut encountered_invalid_number = None;
+        if expecting_action_number_reject_persistently || expecting_action_number_to_reject {
+            white_space_separated_tokens[1..].iter().for_each(|&token| {
+                match token.parse::<usize>() {
+                    Ok(action_number) => {
+                        if expecting_action_number_reject_persistently {
+                            action_numbers_to_reject_persistently.push(action_number);
+                        }
+                        if expecting_action_number_to_reject {
+                            action_numbers_to_reject.push(action_number);
+                        }
+                    }
+                    Err(_) => {
+                        encountered_invalid_number = Some(token);
+                    }
+                }
+            });
+        }
+
+        if let Some(invalid_number) = encountered_invalid_number {
+            return Err(format!("Invalid action number: {}", invalid_number));
+        }
+        return Ok(Self {
+            encountered_no,
+            encountered_yes,
+            encountered_reject_command_persistently,
+            action_numbers_to_reject,
+            action_numbers_to_reject_persistently,
+            encountered_accept_the_rest_of_the_commands,
+        });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    const REJECTION_FLAG: &str = "reject_command_persistently";
+    const YES_FLAG: &str = "yes";
+    const NO_FLAG: &str = "no";
+    const ACCEPT_THE_REST_OF_THE_COMMANDS_FLAG: &str = "accept_the_rest_of_the_commands";
+    const UNUSED_CHARACTER: &str = "U";
+
+    fn compute_persistent_rejection_string(action_number: usize) -> String {
+        format!("reject_action_persistently_{}", action_number)
+    }
+    fn compute_rejection_string(action_number: usize) -> String {
+        format!("reject_action_{}", action_number)
+    }
+    fn compute_flags(command: &UserCommand) -> HashSet<String> {
+        let mut flags = HashSet::new();
+        if command.encountered_no {
+            flags.insert(NO_FLAG.to_string());
+        }
+        if command.encountered_yes {
+            flags.insert(YES_FLAG.to_string());
+        }
+        if command.encountered_reject_command_persistently {
+            flags.insert(REJECTION_FLAG.to_string());
+        }
+        for action_number in &command.action_numbers_to_reject {
+            flags.insert(compute_rejection_string(*action_number));
+        }
+        for action_number in &command.action_numbers_to_reject_persistently {
+            flags.insert(compute_persistent_rejection_string(*action_number));
+        }
+        if command.encountered_accept_the_rest_of_the_commands {
+            flags.insert(ACCEPT_THE_REST_OF_THE_COMMANDS_FLAG.to_string());
+        }
+        flags
+    }
+
+    fn assert_input_has_flags(input: &str, expected_flags: &HashSet<String>) {
+        let command = UserCommand::new(input.to_string()).unwrap();
+        let flags = compute_flags(&command);
+        assert_eq!(flags, *expected_flags);
+    }
+
+    fn assert_error(input: &str) {
+        let result = UserCommand::new(input.to_string());
+        assert!(result.is_err(), "Expected an error for input: {}", input);
+    }
+
+    #[test]
+    fn handles_empty() {
+        let input = "";
+        let expected_flags = HashSet::from([NO_FLAG.to_string()]);
+        assert_input_has_flags(&input, &expected_flags);
+    }
+
+    #[test]
+    fn handles_multiple_spaces_for_persistent_rejection() {
+        let input = "yr 3 9";
+        let expected_flags = HashSet::from([
+            YES_FLAG.to_string(),
+            compute_persistent_rejection_string(3).to_string(),
+            compute_persistent_rejection_string(9).to_string(),
+        ]);
+        assert_input_has_flags(&input, &expected_flags);
+    }
+
+    #[test]
+    fn handles_multiple_spaces_for_rejection() {
+        let input = "d 4 5";
+        let expected_flags = HashSet::from([
+            compute_rejection_string(4).to_string(),
+            compute_rejection_string(5).to_string(),
+        ]);
+        assert_input_has_flags(&input, &expected_flags);
+    }
+
+    #[test]
+    fn yes() {
+        let input = "y";
+        let expected_flags = HashSet::from([YES_FLAG.to_string()]);
+        assert_input_has_flags(&input, &expected_flags);
+    }
+
+    #[test]
+    fn rejects_yes_and_no() {
+        let input = "yn";
+        assert_error(input);
+    }
+
+    #[test]
+    fn no() {
+        let input = "n";
+        let expected_flags = HashSet::from([NO_FLAG.to_string()]);
+        assert_input_has_flags(&input, &expected_flags);
+    }
+
+    #[test]
+    fn persistently_reject_number_one() {
+        let input = "r 1";
+        let expected_flags = HashSet::from([compute_persistent_rejection_string(1).to_string()]);
+        assert_input_has_flags(&input, &expected_flags);
+    }
+
+    #[test]
+    fn reject_number_two() {
+        let input = "d 2";
+        let expected_flags = HashSet::from([compute_rejection_string(2).to_string()]);
+        assert_input_has_flags(&input, &expected_flags);
+    }
+
+    #[test]
+    fn reject_command() {
+        let input = "c";
+        let expected_flags = HashSet::from([REJECTION_FLAG.to_string()]);
+        assert_input_has_flags(&input, &expected_flags);
+    }
+
+    #[test]
+    fn combination() {
+        let input = "ycr 2";
+        let expected_flags = HashSet::from([
+            YES_FLAG.to_string(),
+            REJECTION_FLAG.to_string(),
+            compute_persistent_rejection_string(2).to_string(),
+        ]);
+        assert_input_has_flags(&input, &expected_flags);
+    }
+
+    #[test]
+    fn unused_character() {
+        let input = UNUSED_CHARACTER;
+        assert_error(input);
+    }
+
+    #[test]
+    fn accepting_all() {
+        let input = "a";
+        let expected_flags = HashSet::from([ACCEPT_THE_REST_OF_THE_COMMANDS_FLAG.to_string()]);
+        assert_input_has_flags(&input, &expected_flags);
+    }
+}

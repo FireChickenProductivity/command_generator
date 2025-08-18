@@ -123,7 +123,6 @@ impl BasicAction {
 
     pub fn compute_argument_json(&self, argument: &Argument) -> String {
         match argument {
-            Argument::StringArgument(arg) => arg.replace("\"", "\\\""),
             Argument::CaptureArgument(arg) => arg.to_json(),
             other => self.compute_string_argument(other),
         }
@@ -374,7 +373,7 @@ fn add_current_item(
     Ok(())
 }
 
-fn load_basic_action_from_json(json: &str) -> Result<BasicAction, String> {
+pub fn load_basic_action_from_json(json: &str) -> Result<BasicAction, String> {
     let text = json.trim();
     let mut name = String::new();
     let mut arguments: Vec<Argument> = Vec::new();

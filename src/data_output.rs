@@ -1,25 +1,17 @@
+use crate::paths;
 use crate::recommendation_generation::*;
-use std::env::current_dir;
 use std::fs;
 use std::io::{self, Write};
 use std::path::PathBuf;
 
-fn create_directory_if_nonexistent(directory: &PathBuf) -> io::Result<()> {
-    if !directory.exists() {
-        fs::create_dir_all(&directory)?;
-    }
-    Ok(())
-}
+const DATA_DIRECTORY_NAME: &str = "data";
 
 fn compute_data_directory() -> io::Result<PathBuf> {
-    let mut data_directory = current_dir()?;
-    data_directory.push("data");
-    Ok(data_directory)
+    paths::compute_directory_under_current_directory(DATA_DIRECTORY_NAME)
 }
 
 pub fn create_data_directory() -> io::Result<()> {
-    let path = compute_data_directory()?;
-    create_directory_if_nonexistent(&path)?;
+    paths::create_directory_under_current_directory(DATA_DIRECTORY_NAME)?;
     Ok(())
 }
 

@@ -56,7 +56,6 @@ fn get_number_of_recommendations_from_user() -> usize {
 }
 
 pub struct InputParameters {
-    pub record_file: File,
     pub max_chain_size: usize,
     pub number_of_recommendations: usize,
 }
@@ -94,15 +93,17 @@ fn get_number_of_recommendations(arguments: &Vec<String>) -> usize {
     }
 }
 
-pub fn get_input_parameters_from_user() -> InputParameters {
+pub fn get_input_parameters_from_user() -> (File, InputParameters) {
     let arguments: Vec<String> = env::args().collect();
     let record_file = get_file(&arguments);
     let max_chain_size = get_max_chain_size(&arguments);
     let number_of_recommendations = get_number_of_recommendations(&arguments);
 
-    InputParameters {
+    (
         record_file,
-        max_chain_size,
-        number_of_recommendations,
-    }
+        InputParameters {
+            max_chain_size,
+            number_of_recommendations,
+        },
+    )
 }

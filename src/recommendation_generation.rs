@@ -184,9 +184,27 @@ impl ActionSet {
         self.set.insert(representation);
     }
 
+    pub fn insert_representation(&mut self, representation: &str) {
+        self.set.insert(representation.to_string());
+    }
+
+    pub fn insert_action(&mut self, action: &BasicAction) {
+        let representation = action.to_json();
+        self.set.insert(representation);
+    }
+
     pub fn contains(&self, actions: &Vec<BasicAction>) -> bool {
         let representation = compute_string_representation_of_actions(actions);
         self.set.contains(&representation)
+    }
+
+    pub fn contains_action(&self, action: &BasicAction) -> bool {
+        let representation = action.to_json();
+        self.set.contains(&representation)
+    }
+
+    pub fn contains_representation(&self, representation: &str) -> bool {
+        self.set.contains(representation)
     }
 
     pub fn get_size(&self) -> usize {
